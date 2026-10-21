@@ -75,7 +75,10 @@ def check_source():
         for sz in TARGETS:
             key=f'/usr/share/icons/hicolor/{sz}x{sz}/apps/{IDENT}.png'
             require(key in paths,f'{kind}: missing icon {sz}')
-            require(f'/usr/share/icons/hicolor/{sz}x{sz}/apps/tcs-mail.png' in paths,f'{kind}: missing Tauri icon alias {sz}')
+            if kind == 'deb':
+                require(f'/usr/share/icons/hicolor/{sz}x{sz}/apps/tcs-mail.png' in paths,f'{kind}: missing Tauri icon alias {sz}')
+            else:
+                require(f'/usr/share/icons/hicolor/{sz}x{sz}/apps/tcs-mail.png' not in paths,f'{kind}: manually mapped icon alias causes duplicate entry {sz}')
             pp=ROOT/'src-tauri'/paths[key]
             require(pp.is_file(),f'{kind}: icon source missing: {pp}')
             require(png_dimensions(pp.read_bytes())==(sz,sz),f'{kind}: wrong icon size {sz}')
@@ -89,7 +92,7 @@ def check_source():
     else:
         print('NOT RUN: external AppStream validator unavailable (install appstream).')
 
-def checks_payload(files):
+def checks_payload(files, *, rpm=False):
     name='.//usr/share/'
     def find(path):
         for key,val in files.items():
@@ -104,8 +107,12 @@ def checks_payload(files):
     for sz in TARGETS:
         blob=find(f'/usr/share/icons/hicolor/{sz}x{sz}/apps/{IDENT}.png')
         require(png_dimensions(blob)==(sz,sz),f'Invalid icon in package: {sz}')
-        alias=find(f'/usr/share/icons/hicolor/{sz}x{sz}/apps/tcs-mail.png')
-        require(png_dimensions(alias)==(sz,sz),f'Invalid generated launcher icon alias: {sz}')
+        alias_key=f'usr/share/icons/hicolor/{sz}x{sz}/apps/tcs-mail.png'
+        alias=next((v for k,v in files.items() if k.lstrip('./')==alias_key),None)
+        if not rpm:
+            require(alias is not None,f'DEB missing launcher icon alias: {sz}')
+        if alias is not None:
+            require(png_dimensions(alias)==(sz,sz),f'Invalid generated launcher icon alias: {sz}')
     print('PASS: package contains visible TCS Mail desktop entry, 4 official icon resolutions and valid AppStream metadata.')
 
 def verify_deb(path):
@@ -137,7 +144,7 @@ def verify_rpm(path):
             if folder.exists():
                 for file in folder.rglob('*'):
                     if file.is_file():files[str(file.relative_to(tmp))]=file.read_bytes()
-        checks_payload(files)
+        checks_payload(files, rpm=True)
 
 def main():
     ap=argparse.ArgumentParser()
