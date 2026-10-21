@@ -44,6 +44,9 @@
     "windows": {
       "nsis": {
         "installerIcon": "icons/icon.ico"
+      },
+      "wix": {
+        "version": "0.8.203"
       }
     },
     "useLocalToolsDir": true,
@@ -70,11 +73,7 @@
           "/usr/share/icons/hicolor/32x32/apps/com.thecreativesolver.TCSMail.png": "resources/packaging-icons/tcs-mail-32.png",
           "/usr/share/icons/hicolor/128x128/apps/com.thecreativesolver.TCSMail.png": "resources/packaging-icons/tcs-mail-128.png",
           "/usr/share/icons/hicolor/256x256/apps/com.thecreativesolver.TCSMail.png": "resources/packaging-icons/tcs-mail-256.png",
-          "/usr/share/icons/hicolor/512x512/apps/com.thecreativesolver.TCSMail.png": "resources/packaging-icons/tcs-mail-512.png",
-          "/usr/share/icons/hicolor/32x32/apps/tcs-mail.png": "resources/packaging-icons/tcs-mail-32.png",
-          "/usr/share/icons/hicolor/128x128/apps/tcs-mail.png": "resources/packaging-icons/tcs-mail-128.png",
-          "/usr/share/icons/hicolor/256x256/apps/tcs-mail.png": "resources/packaging-icons/tcs-mail-256.png",
-          "/usr/share/icons/hicolor/512x512/apps/tcs-mail.png": "resources/packaging-icons/tcs-mail-512.png"
+          "/usr/share/icons/hicolor/512x512/apps/com.thecreativesolver.TCSMail.png": "resources/packaging-icons/tcs-mail-512.png"
         },
         "desktopTemplate": "resources/tcs-generated-hidden.desktop.hbs"
       }
