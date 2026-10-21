@@ -1,0 +1,30 @@
+#!/usr/bin/env node
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {composerSelector,composerQuery,composerQueryAll,recipientNode} from '../frontend/composer_lookup.js';
+const code=p=>readFileSync(new URL(p,import.meta.url),'utf8');
+const composer=code('../frontend/composer.js');
+const main=code('../frontend/main.js');
+const native=code('../frontend/native_window.js');
+const rust=code('../src-tauri/src/lib.rs');
+const entry=code('../src-tauri/src/main.rs');
+const views=code('../frontend/views.js');
+assert.equal(composerSelector('#editor',true),'[data-tcs-id="editor"]');
+assert.equal(composerSelector('#editor',false),'#editor');
+assert.equal(composerSelector('.composeToolbar #fontFamily',true),'.composeToolbar [data-tcs-id="fontFamily"]');
+const htmlNode={value:'editor'}, nativeNode={value:'janela'};
+const fakeScope={querySelector:q=>({'[data-tcs-id="editor"]':htmlNode,'#editor':nativeNode,'#cTo':nativeNode,'[data-tcs-id="cTo"]':htmlNode})[q]||null,
+ querySelectorAll:q=>[({'[data-tcs-id="editor"]':htmlNode,'#editor':nativeNode})[q]].filter(Boolean)};
+assert.equal(composerQuery('#editor',fakeScope,true),htmlNode);
+assert.equal(composerQuery('#editor',fakeScope,false),nativeNode);
+assert.deepEqual(composerQueryAll('#editor',fakeScope,true),[htmlNode]);
+assert.deepEqual(composerQueryAll('#editor',fakeScope,false),[nativeNode]);
+assert.equal(recipientNode(fakeScope,'cTo'),htmlNode);
+assert(!composer.includes('domQuery('),'Fallback antigo inexistente não pode permanecer');
+for(const fragment of ["composerQuery(selector,scope,!!options.inlineHost)","composerQueryAll(selector,scope,!!options.inlineHost)","recipientNode(root,inputId)","const editor=$('#editor',root)","editor.innerText=seed.textBody||''"]) assert(composer.includes(fragment),'Compositor: '+fragment);
+for(const fragment of ["replyAll:all","if(c.warning)toast(c.warning)","openResponseComposer", "forwardSeed(m)"])assert(main.includes(fragment),'Respostas: '+fragment);
+assert(native.includes('if(c.warning)toast(c.warning)'),'Resposta da janela independente sem aviso de Reply-To');
+for(const fragment of ['disable_linux_tcs_background_units','tcs-mail-0.8-background.timer','tcs-mail-0.8-idle.service','handle.exit(0)','general.background_enabled", "false"','tokio::time::timeout(std::time::Duration::from_secs(4), fetch)'])assert(rust.includes(fragment),'Linux/Reply-To: '+fragment);
+assert(entry.includes('if std::env::args().any(|a| a == "--idle-watch" || a == "--background-tick")'),'CLI Linux pode iniciar jobs sem interface');
+assert(views.includes("$('#backgroundEnabled',p).disabled=true")&&views.includes("$('#syncBackground',p).disabled=true"),'UI permite ativar serviço Linux');
+console.log('PASS: h5 queries integradas e independentes, resposta offline, serviços e integridade de UI');

@@ -1,0 +1,43 @@
+[package]
+name = "tcs-mail"
+version = "0.8.2-rc3"
+edition = "2021"
+rust-version = "1.89"
+license = "MPL-2.0"
+
+[lib]
+name = "tcs_mail_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[[bin]]
+name = "tcs-mail"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = "2.5"
+
+[dependencies]
+tauri = { version = "2.10", features = ["tray-icon"] }
+tcs-core = { path = "../crates/tcs-core", features = ["async-imap-migration"] }
+tcs-ai-core = { path = "../crates/tcs-ai-core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["sync", "rt", "macros", "fs", "io-util"] }
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4"] }
+rfd = "0.15"
+directories = "6"
+rusqlite = "0.32"
+html2text = "0.12"
+base64 = "0.22"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
+
+tauri-plugin-single-instance = "2"
+
+tauri-plugin-window-state = "2"
+
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+notify-rust = "4.18.1"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+notify-rust = { version = "4.18.1", features = ["preview-macos-un"] }

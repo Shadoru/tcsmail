@@ -1,0 +1,46 @@
+# Rust/Tauri output and toolchains
+/target/
+**/target/
+/.cargo/
+/.rustup/
+/tauri-cli-target/
+node_modules/
+**/node_modules/
+/dist/
+**/dist/
+
+# Sensitive configuration (keep samples)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.kdbx
+*.p8
+*.mobileprovision
+*.sqlite
+*.sqlite3
+*.db
+*.db-wal
+*.db-shm
+*.log
+**/keyrings/
+**/credentials/
+**/secrets/
+**/backups/
+**/cache/
+**/tmp/
+**/attachments/
+
+# OS, local tools, IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+__pycache__/
+*.pyc
+*.tmp
+*.bak
+*.swp

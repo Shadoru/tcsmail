@@ -1,0 +1,261 @@
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum SecretError {
+    #[error("credential backend unavailable: {0}")]
+    MissingTool(String),
+    #[error("credential backend failed: {0}")]
+    Failed(String),
+}
+
+pub struct SecretStore;
+
+impl SecretStore {
+    /// Store a namespaced application secret in the operating-system credential store.
+    /// This is used for OAuth token sets and intentionally has no file/SQLite fallback.
+    pub fn store_secret(key: &str, value: &str) -> Result<(), SecretError> {
+        platform::store(key, value)
+    }
+
+    pub fn lookup_secret(key: &str) -> Result<String, SecretError> {
+        platform::lookup(key)
+    }
+
+    pub fn clear_secret(key: &str) -> Result<(), SecretError> {
+        platform::clear(key)
+    }
+
+    pub fn store_password(account_email: &str, password: &str) -> Result<(), SecretError> {
+        platform::store(account_email, password)
+    }
+
+    pub fn lookup_password(account_email: &str) -> Result<String, SecretError> {
+        platform::lookup(account_email)
+    }
+
+    pub fn clear_password(account_email: &str) -> Result<(), SecretError> {
+        platform::clear(account_email)
+    }
+
+    pub fn migrate_password(old_email: &str, new_email: &str) -> Result<(), SecretError> {
+        if old_email.eq_ignore_ascii_case(new_email) {
+            return Ok(());
+        }
+        let password = Self::lookup_password(old_email)?;
+        Self::store_password(new_email, &password)?;
+        let _ = Self::clear_password(old_email);
+        Ok(())
+    }
+}
+
+#[cfg(target_os = "linux")]
+mod platform {
+    use super::SecretError;
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+
+    pub fn store(account: &str, password: &str) -> Result<(), SecretError> {
+        let mut child = Command::new("secret-tool")
+            .args([
+                "store",
+                "--label",
+                &format!("TCS Mail — {account}"),
+                "application",
+                "tcs-mail",
+                "account",
+                account,
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|e| SecretError::MissingTool(e.to_string()))?;
+        child
+            .stdin
+            .as_mut()
+            .ok_or_else(|| SecretError::Failed("credential stdin unavailable".into()))?
+            .write_all(password.as_bytes())
+            .map_err(|e| SecretError::Failed(e.to_string()))?;
+        let out = child
+            .wait_with_output()
+            .map_err(|e| SecretError::Failed(e.to_string()))?;
+        if out.status.success() {
+            Ok(())
+        } else {
+            Err(SecretError::Failed(
+                String::from_utf8_lossy(&out.stderr).trim().to_string(),
+            ))
+        }
+    }
+
+    pub fn lookup(account: &str) -> Result<String, SecretError> {
+        let out = Command::new("secret-tool")
+            .args(["lookup", "application", "tcs-mail", "account", account])
+            .output()
+            .map_err(|e| SecretError::MissingTool(e.to_string()))?;
+        if !out.status.success() {
+            return Err(SecretError::Failed(
+                String::from_utf8_lossy(&out.stderr).trim().to_string(),
+            ));
+        }
+        let value = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        if value.is_empty() {
+            Err(SecretError::Failed("credential not found".into()))
+        } else {
+            Ok(value)
+        }
+    }
+
+    pub fn clear(account: &str) -> Result<(), SecretError> {
+        let out = Command::new("secret-tool")
+            .args(["clear", "application", "tcs-mail", "account", account])
+            .output()
+            .map_err(|e| SecretError::MissingTool(e.to_string()))?;
+        if out.status.success() {
+            Ok(())
+        } else {
+            Err(SecretError::Failed(
+                String::from_utf8_lossy(&out.stderr).trim().to_string(),
+            ))
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+mod platform {
+    use super::SecretError;
+    use security_framework::passwords::{
+        delete_generic_password, generic_password, set_generic_password, PasswordOptions,
+    };
+    const SERVICE: &str = "com.thecreativesolver.TCSMail";
+
+    pub fn store(account: &str, password: &str) -> Result<(), SecretError> {
+        // Use Security.framework directly so OAuth/password material never appears in
+        // a process command line (Apple explicitly documents security(1) -w as insecure).
+        set_generic_password(SERVICE, account, password.as_bytes())
+            .map_err(|e| SecretError::Failed(e.to_string()))
+    }
+
+    pub fn lookup(account: &str) -> Result<String, SecretError> {
+        let bytes = generic_password(PasswordOptions::new_generic_password(SERVICE, account))
+            .map_err(|e| SecretError::Failed(e.to_string()))?;
+        String::from_utf8(bytes)
+            .map_err(|e| SecretError::Failed(format!("credential is not UTF-8: {e}")))
+    }
+
+    pub fn clear(account: &str) -> Result<(), SecretError> {
+        delete_generic_password(SERVICE, account).map_err(|e| SecretError::Failed(e.to_string()))
+    }
+}
+
+#[cfg(target_os = "windows")]
+mod platform {
+    use super::SecretError;
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+
+    const SCRIPT: &str = r#"
+param([string]$Op,[string]$User)
+$utf8 = New-Object System.Text.UTF8Encoding($false)
+[Console]::InputEncoding = $utf8
+[Console]::OutputEncoding = $utf8
+Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public class TcsCred {
+ [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)] public struct CREDENTIAL { public UInt32 Flags; public UInt32 Type; public string TargetName; public string Comment; public long LastWritten; public UInt32 CredentialBlobSize; public IntPtr CredentialBlob; public UInt32 Persist; public UInt32 AttributeCount; public IntPtr Attributes; public string TargetAlias; public string UserName; }
+ [DllImport("Advapi32.dll", EntryPoint="CredWriteW", CharSet=CharSet.Unicode, SetLastError=true)] public static extern bool CredWrite(ref CREDENTIAL cred, UInt32 flags);
+ [DllImport("Advapi32.dll", EntryPoint="CredReadW", CharSet=CharSet.Unicode, SetLastError=true)] public static extern bool CredRead(string target, UInt32 type, UInt32 flags, out IntPtr credentialPtr);
+ [DllImport("Advapi32.dll", EntryPoint="CredDeleteW", CharSet=CharSet.Unicode, SetLastError=true)] public static extern bool CredDelete(string target, UInt32 type, UInt32 flags);
+ [DllImport("Advapi32.dll", EntryPoint="CredFree", SetLastError=true)] public static extern void CredFree(IntPtr cred);
+}
+'@
+$target='TCS Mail/'+$User
+if($Op -eq 'set'){
+  $secret=[Console]::In.ReadToEnd()
+  $bytes=[Text.Encoding]::Unicode.GetBytes($secret)
+  $ptr=[Runtime.InteropServices.Marshal]::AllocHGlobal($bytes.Length)
+  try {[Runtime.InteropServices.Marshal]::Copy($bytes,0,$ptr,$bytes.Length);$c=New-Object TcsCred+CREDENTIAL;$c.Type=1;$c.TargetName=$target;$c.UserName=$User;$c.CredentialBlobSize=$bytes.Length;$c.CredentialBlob=$ptr;$c.Persist=2;if(-not [TcsCred]::CredWrite([ref]$c,0)){exit 2}} finally {[Runtime.InteropServices.Marshal]::FreeHGlobal($ptr)}
+}elseif($Op -eq 'get'){
+  $p=[IntPtr]::Zero;if(-not [TcsCred]::CredRead($target,1,0,[ref]$p)){exit 3};try{$c=[Runtime.InteropServices.Marshal]::PtrToStructure($p,[type][TcsCred+CREDENTIAL]);$bytes=New-Object byte[] $c.CredentialBlobSize;[Runtime.InteropServices.Marshal]::Copy($c.CredentialBlob,$bytes,0,$bytes.Length);[Console]::Out.Write([Text.Encoding]::Unicode.GetString($bytes))}finally{[TcsCred]::CredFree($p)}
+}elseif($Op -eq 'delete'){if(-not [TcsCred]::CredDelete($target,1,0)){exit 4}}
+"#;
+
+    fn command(op: &str, user: &str) -> Result<std::process::Child, SecretError> {
+        Command::new("powershell.exe")
+            .args([
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-Command",
+                SCRIPT,
+                "-Op",
+                op,
+                "-User",
+                user,
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|e| SecretError::MissingTool(e.to_string()))
+    }
+    pub fn store(account: &str, password: &str) -> Result<(), SecretError> {
+        let mut child = command("set", account)?;
+        child
+            .stdin
+            .as_mut()
+            .ok_or_else(|| SecretError::Failed("credential stdin unavailable".into()))?
+            .write_all(password.as_bytes())
+            .map_err(|e| SecretError::Failed(e.to_string()))?;
+        let out = child
+            .wait_with_output()
+            .map_err(|e| SecretError::Failed(e.to_string()))?;
+        if out.status.success() {
+            Ok(())
+        } else {
+            Err(SecretError::Failed(
+                String::from_utf8_lossy(&out.stderr).trim().to_string(),
+            ))
+        }
+    }
+    pub fn lookup(account: &str) -> Result<String, SecretError> {
+        let out = command("get", account)?
+            .wait_with_output()
+            .map_err(|e| SecretError::Failed(e.to_string()))?;
+        if !out.status.success() {
+            return Err(SecretError::Failed("credential not found".into()));
+        }
+        let value = String::from_utf8_lossy(&out.stdout).to_string();
+        if value.is_empty() {
+            Err(SecretError::Failed("credential not found".into()))
+        } else {
+            Ok(value)
+        }
+    }
+    pub fn clear(account: &str) -> Result<(), SecretError> {
+        let out = command("delete", account)?
+            .wait_with_output()
+            .map_err(|e| SecretError::Failed(e.to_string()))?;
+        if out.status.success() {
+            Ok(())
+        } else {
+            Err(SecretError::Failed("credential delete failed".into()))
+        }
+    }
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+mod platform {
+    use super::SecretError;
+    pub fn store(_: &str, _: &str) -> Result<(), SecretError> {
+        Err(SecretError::MissingTool("unsupported platform".into()))
+    }
+    pub fn lookup(_: &str) -> Result<String, SecretError> {
+        Err(SecretError::MissingTool("unsupported platform".into()))
+    }
+    pub fn clear(_: &str) -> Result<(), SecretError> {
+        Err(SecretError::MissingTool("unsupported platform".into()))
+    }
+}

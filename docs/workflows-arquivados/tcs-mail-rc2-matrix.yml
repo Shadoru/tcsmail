@@ -1,0 +1,147 @@
+name: TCS Mail 0.8.2-rc3 native installers
+on:
+  workflow_dispatch:
+    inputs:
+      linux:
+        description: 'Linux DEB and RPM'
+        type: boolean
+        default: true
+      windows:
+        description: 'Windows EXE and MSI'
+        type: boolean
+        default: true
+      macos:
+        description: 'macOS APP and DMG'
+        type: boolean
+        default: true
+permissions:
+  contents: read
+jobs:
+  linux:
+    if: ${{ inputs.linux }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Native Tauri dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf appstream rpm2cpio cpio
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Verify source
+        run: |
+          cargo fmt --all -- --check
+          cargo check --locked --workspace --all-targets
+          cargo test --locked --workspace
+          cargo clippy --locked --workspace --all-targets -- -D warnings
+          node --check frontend/main.js
+          node --check frontend/drafts.js
+          node --check frontend/views.js
+          node scripts/verify-ms-oauth.mjs
+          node scripts/quality/rc2-release-contract.mjs
+          node scripts/quality/rc2-interface-regression.mjs
+          node scripts/quality/rc2-native-composer-behavior.mjs
+          python3 scripts/quality/rc2-presentation-verify.py --source
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version '^2' --locked
+      - name: DEB and RPM
+        run: cargo tauri build --bundles deb,rpm
+      - name: Check actual Linux installer metadata
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          debs=(target/release/bundle/deb/*.deb)
+          rpms=(target/release/bundle/rpm/*.rpm)
+          (( ${#debs[@]} > 0 && ${#rpms[@]} > 0 ))
+          for pkg in "${debs[@]}"; do python3 scripts/quality/rc2-presentation-verify.py --deb "$pkg"; done
+          for pkg in "${rpms[@]}"; do python3 scripts/quality/rc2-presentation-verify.py --rpm "$pkg"; done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tcs-mail-linux-rc2
+          path: target/release/bundle/**/*
+          if-no-files-found: error
+  windows:
+    if: ${{ inputs.windows }}
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Verify Rust and Javascript
+        shell: pwsh
+        run: |
+          cargo fmt --all -- --check
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          cargo check --locked --workspace --all-targets
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          cargo test --locked --workspace
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          cargo clippy --locked --workspace --all-targets -- -D warnings
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          node --check frontend/main.js
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          node --check frontend/drafts.js
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          node scripts/verify-ms-oauth.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/quality/rc2-release-contract.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/quality/rc2-interface-regression.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/quality/rc2-native-composer-behavior.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/quality/rc2-presentation-verify.py --source
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version '^2' --locked
+      - name: EXE (NSIS) and MSI
+        run: cargo tauri build --bundles nsis,msi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tcs-mail-windows-rc2
+          path: target/release/bundle/**/*
+          if-no-files-found: error
+  macos:
+    if: ${{ inputs.macos }}
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Verify source
+        run: |
+          cargo fmt --all -- --check
+          cargo check --locked --workspace --all-targets
+          cargo test --locked --workspace
+          cargo clippy --locked --workspace --all-targets -- -D warnings
+          node --check frontend/main.js
+          node --check frontend/drafts.js
+          node scripts/verify-ms-oauth.mjs
+          node scripts/quality/rc2-release-contract.mjs
+          node scripts/quality/rc2-interface-regression.mjs
+          node scripts/quality/rc2-native-composer-behavior.mjs
+          python3 scripts/quality/rc2-presentation-verify.py --source
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version '^2' --locked
+      - name: macOS APP and DMG
+        run: cargo tauri build --bundles app,dmg
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tcs-mail-macos-rc2
+          path: target/release/bundle/**/*
+          if-no-files-found: error

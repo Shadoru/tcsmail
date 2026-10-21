@@ -1,0 +1,83 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "TCS Mail",
+  "version": "0.8.2-rc3",
+  "identifier": "com.thecreativesolver.TCSMail",
+  "build": {
+    "frontendDist": "../frontend"
+  },
+  "app": {
+    "enableGTKAppId": true,
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data: cid: https: http:; style-src 'self' 'unsafe-inline'; connect-src 'none'; object-src 'none'; frame-src 'self' data:; base-uri 'none'; form-action 'none'"
+    },
+    "windows": [
+      {
+        "label": "main",
+        "title": "TCS Mail",
+        "width": 1380,
+        "height": 860,
+        "minWidth": 960,
+        "minHeight": 620,
+        "resizable": true
+      }
+    ],
+    "withGlobalTauri": true
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/512x512.png",
+      "icons/icon.ico",
+      "icons/icon.icns"
+    ],
+    "category": "Productivity",
+    "shortDescription": "Cliente de e-mail multiplataforma e leve, com IA opcional sob seu controle",
+    "longDescription": "TCS Mail é um cliente de e-mail multiplataforma, projetado para ser leve e responsivo em Linux, Windows e macOS. Gerencie contas IMAP/SMTP, inclusive autenticação OAuth quando suportada, em uma caixa unificada. Organize mensagens e pastas, escreva com assinaturas e modelos, use contatos e calendário e continue trabalhando com rascunhos locais. Quando desejar, escolha provedores de inteligência artificial compatíveis para auxiliar na leitura, análise e redação de mensagens. Os recursos de IA são opcionais e as preferências de privacidade ficam sob controle do usuário.",
+    "publisher": "The Creative Solver",
+    "homepage": "https://thecreativesolver.com/mail",
+    "copyright": "Copyright © The Creative Solver",
+    "windows": {
+      "nsis": {
+        "installerIcon": "icons/icon.ico"
+      }
+    },
+    "useLocalToolsDir": true,
+    "linux": {
+      "deb": {
+        "files": {
+          "/usr/share/metainfo/com.thecreativesolver.TCSMail.metainfo.xml": "resources/com.thecreativesolver.TCSMail.metainfo.xml",
+          "/usr/share/applications/com.thecreativesolver.TCSMail.desktop": "resources/com.thecreativesolver.TCSMail.desktop",
+          "/usr/share/icons/hicolor/32x32/apps/com.thecreativesolver.TCSMail.png": "resources/packaging-icons/tcs-mail-32.png",
+          "/usr/share/icons/hicolor/128x128/apps/com.thecreativesolver.TCSMail.png": "resources/packaging-icons/tcs-mail-128.png",
+          "/usr/share/icons/hicolor/256x256/apps/com.thecreativesolver.TCSMail.png": "resources/packaging-icons/tcs-mail-256.png",
+          "/usr/share/icons/hicolor/512x512/apps/com.thecreativesolver.TCSMail.png": "resources/packaging-icons/tcs-mail-512.png",
+          "/usr/share/icons/hicolor/32x32/apps/tcs-mail.png": "resources/packaging-icons/tcs-mail-32.png",
+          "/usr/share/icons/hicolor/128x128/apps/tcs-mail.png": "resources/packaging-icons/tcs-mail-128.png",
+          "/usr/share/icons/hicolor/256x256/apps/tcs-mail.png": "resources/packaging-icons/tcs-mail-256.png",
+          "/usr/share/icons/hicolor/512x512/apps/tcs-mail.png": "resources/packaging-icons/tcs-mail-512.png"
+        },
+        "desktopTemplate": "resources/tcs-generated-hidden.desktop.hbs"
+      },
+      "rpm": {
+        "files": {
+          "/usr/share/metainfo/com.thecreativesolver.TCSMail.metainfo.xml": "resources/com.thecreativesolver.TCSMail.metainfo.xml",
+          "/usr/share/applications/com.thecreativesolver.TCSMail.desktop": "resources/com.thecreativesolver.TCSMail.desktop",
+          "/usr/share/icons/hicolor/32x32/apps/com.thecreativesolver.TCSMail.png": "resources/packaging-icons/tcs-mail-32.png",
+          "/usr/share/icons/hicolor/128x128/apps/com.thecreativesolver.TCSMail.png": "resources/packaging-icons/tcs-mail-128.png",
+          "/usr/share/icons/hicolor/256x256/apps/com.thecreativesolver.TCSMail.png": "resources/packaging-icons/tcs-mail-256.png",
+          "/usr/share/icons/hicolor/512x512/apps/com.thecreativesolver.TCSMail.png": "resources/packaging-icons/tcs-mail-512.png",
+          "/usr/share/icons/hicolor/32x32/apps/tcs-mail.png": "resources/packaging-icons/tcs-mail-32.png",
+          "/usr/share/icons/hicolor/128x128/apps/tcs-mail.png": "resources/packaging-icons/tcs-mail-128.png",
+          "/usr/share/icons/hicolor/256x256/apps/tcs-mail.png": "resources/packaging-icons/tcs-mail-256.png",
+          "/usr/share/icons/hicolor/512x512/apps/tcs-mail.png": "resources/packaging-icons/tcs-mail-512.png"
+        },
+        "desktopTemplate": "resources/tcs-generated-hidden.desktop.hbs"
+      }
+    }
+  }
+}

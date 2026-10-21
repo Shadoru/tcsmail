@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["release", "started_at", "finished_at", "phases", "failures", "final"],
+  "properties": {
+    "release": {"type":"string"},
+    "artifact_sha256": {"type":["string","null"]},
+    "started_at": {"type":"string"},
+    "finished_at": {"type":"string"},
+    "environment": {"type":"object"},
+    "phases": {"type":"object"},
+    "warnings": {"type":"array"},
+    "failures": {"type":"array"},
+    "final": {"enum":["PASS","FAIL","BLOCKED"]}
+  }
+}

@@ -1,0 +1,18 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=TCS Mail
+Name[pt_BR]=TCS Mail
+Comment=Lightweight, cross-platform email client with optional AI assistance
+Comment[pt_BR]=Cliente de e-mail multiplataforma e leve, com assistência opcional de IA
+GenericName=Email Client
+GenericName[pt_BR]=Cliente de e-mail
+Exec=tcs-mail %u
+TryExec=tcs-mail
+Icon=com.thecreativesolver.TCSMail
+Categories=Office;Email;Network;
+Keywords=mail;email;imap;smtp;ai;
+Keywords[pt_BR]=e-mail;correio;mensagens;imap;smtp;ia;
+MimeType=x-scheme-handler/mailto;message/rfc822;
+StartupNotify=true
+Terminal=false

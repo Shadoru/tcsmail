@@ -1,0 +1,65 @@
+name: IMAP 0.12/0.17 cross-platform validation
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'frontend/**'
+      - 'tests/**'
+      - 'scripts/**'
+      - 'crates/**'
+      - 'src-tauri/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'vendor/**'
+      - 'scripts/quality/**'
+      - '.github/workflows/imap-cross-platform.yml'
+  pull_request:
+    paths:
+      - 'frontend/**'
+      - 'tests/**'
+      - 'scripts/**'
+      - 'crates/**'
+      - 'src-tauri/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'vendor/**'
+      - 'scripts/quality/**'
+      - '.github/workflows/imap-cross-platform.yml'
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Tauri Linux prerequisites
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf
+      - name: IMAP contract gate (portable Python)
+        run: python scripts/quality/verify-imap-epoch-routes.py
+      - name: Frontend sync and palette regression
+        run: |
+          node scripts/quality/h5-imapfix2-sync-contract.mjs
+          python scripts/quality/h5-imapfix2-theme-contrast.py
+      - name: IMAP 29 restored source gates
+        run: python scripts/quality/h5-imapfix2-portable-gates.py
+      - name: Microsoft OAuth contract checks (no live secrets)
+        run: node scripts/verify-ms-oauth.mjs
+      - name: Pinned workspace compilation
+        run: cargo check --locked --workspace --all-targets
+      - name: Rust unit and TCP protocol fixtures
+        run: cargo test --locked --workspace --lib
+      - name: Release executable compilation
+        run: cargo build --release --locked -p tcs-mail --bin tcs-mail

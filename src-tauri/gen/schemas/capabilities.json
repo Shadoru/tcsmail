@@ -1,0 +1,1 @@
+{"main":{"identifier":"main","description":"Minimum capabilities for the trusted TCS Mail shell","local":true,"windows":["main","composer-*","reader-*"],"permissions":["core:window:default","core:event:default","core:window:allow-close","core:window:allow-set-title"]}}

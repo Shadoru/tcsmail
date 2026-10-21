@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import {inspectMessageSafety} from '../../frontend/send_safety.js';
+const inspect=inspectMessageSafety;
+assert.equal(inspect({text:'Segue anexo'}).missingAttachment,true);
+assert.equal(inspect({text:'Segue anexo',attachmentCount:1}).missingAttachment,false);
+assert.equal(inspect({text:'Sem anexo'}).missingAttachment,false);
+assert.deepEqual(inspect({recipients:['p@outside.com'],internalDomains:[]}).externalRecipients,[]);
+assert.deepEqual(inspect({recipients:['p@outside.com'],internalDomains:['corp.com']}).externalRecipients,['p@outside.com']);
+assert.deepEqual(inspect({recipients:['bad-email']}).invalidRecipients,['bad-email']);
+assert.equal(inspect({recipients:['me@gmai.com'],domainHints:true}).domainHints.length,1);
+assert.equal(inspect({html:'<a href="javascript:alert(1)">x</a>'}).suspiciousLinks.length,1);
+assert.equal(inspect({html:'<a href="https://example.org?token=123">x</a>'}).suspiciousLinks.length,0);
+console.log('R14 safety behavioral tests PASS');

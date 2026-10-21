@@ -1,0 +1,12 @@
+import fs from 'node:fs';import assert from 'node:assert/strict';
+const c=fs.readFileSync('frontend/composer.js','utf8'),n=fs.readFileSync('frontend/native_window.js','utf8'),css=fs.readFileSync('frontend/styles.css','utf8');
+assert.match(c,/<footer class="composerFooter">[^\n]+data-reattach-panel[^\n]+id="discard"[^\n]+id="sendBtn"/);
+assert.doesNotMatch(c,/<div class="nativeReattachBar"/);
+assert.match(n,/await controller\.saveSnapshot\(\)/);
+assert.match(n,/if\(!accepted\)[^]*?return[^]*?await closeNative\(\)/);
+for(const id of ['composeFindBtn','composePreviewBtn','composeExpandBtn','composeAiDataBtn','composeWordCount','imageAltBtn'])assert.match(c,new RegExp(`id="${id}"`));
+assert.match(c,/data-image-align="left"/);assert.match(c,/data-image-align="right"/);
+assert.match(c,/findRanges=\(\)=>/);assert.match(c,/replaceMatch=range=>/);
+assert.match(c,/if\(!\/\^\(https\?:\|mailto:\)\/i\.test\(url\.trim\(\)\)\)/);
+assert.match(css,/\.returnToReaderPanel\{/);assert.match(css,/\.composeUtilityBar\{/);
+console.log('R12 composer footer and editor extensions contract PASS');

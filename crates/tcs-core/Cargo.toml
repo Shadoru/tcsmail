@@ -1,0 +1,35 @@
+[package]
+name = "tcs-core"
+version = "0.8.2-rc3"
+edition = "2021"
+rust-version = "1.85"
+license = "MPL-2.0"
+
+[features]
+# Compatibility name retained for downstream manifests; the async backend is
+# always compiled and its callers no longer switch to synchronous IMAP.
+async-imap-migration = []
+
+[dependencies]
+rusqlite = { version = "0.32", features = ["bundled", "chrono", "backup"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4"] }
+lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "rustls-tls"] }
+native-tls = "0.2"
+async-imap = { version = "=0.12.0", default-features = false, features = ["runtime-tokio"] }
+tokio = { version = "1", features = ["net", "time", "rt", "io-util", "sync"] }
+tokio-native-tls = { version = "0.3" }
+futures-util = { version = "0.3", features = ["io"] }
+mailparse = "0.15"
+html2text = "0.12"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls", "json"] }
+rand = "0.9"
+sha2 = "0.10"
+base64 = "0.22"
+url = "2"
+[target.'cfg(target_os = "macos")'.dependencies]
+security-framework = "3.7"
+

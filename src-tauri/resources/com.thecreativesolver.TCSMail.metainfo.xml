@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.thecreativesolver.TCSMail</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MPL-2.0</project_license>
+  <name>TCS Mail</name>
+  <summary>A lightweight cross-platform email client with optional AI assistance</summary>
+  <summary xml:lang="pt-BR">Cliente de e-mail leve e multiplataforma, com IA opcional</summary>
+  <description>
+    <p>TCS Mail brings multiple email accounts into one desktop app designed to be lightweight across Linux, Windows and macOS. Organize messages, drafts, contacts and your calendar without depending on AI features.</p>
+    <p>When you choose, use compatible AI providers to help analyze messages and draft replies. You decide whether and how to use AI assistance, while retaining access to traditional email tools and privacy settings.</p>
+    <p xml:lang="pt-BR">O TCS Mail reúne várias contas de e-mail em um aplicativo para Linux, Windows e macOS, projetado para ser leve e ágil. Organize mensagens, rascunhos, contatos e calendário sem depender de inteligência artificial.</p>
+    <p xml:lang="pt-BR">Quando desejar, escolha provedores de IA compatíveis para auxiliar na análise de mensagens e na redação de respostas. Os recursos são opcionais: você controla seu uso e dispõe das ferramentas tradicionais de e-mail e das preferências de privacidade.</p>
+  </description>
+  <developer id="com.thecreativesolver"><name>The Creative Solver</name></developer>
+  <url type="homepage">https://thecreativesolver.com/mail</url>
+  <launchable type="desktop-id">com.thecreativesolver.TCSMail.desktop</launchable>
+  <categories><category>Office</category><category>Email</category></categories>
+  <icon type="stock">com.thecreativesolver.TCSMail</icon>
+  <releases><release version="0.8.2-rc3" date="2026-10-21"/></releases>
+  <provides><binary>tcs-mail</binary></provides>
+  <!-- Screenshot URLs will be inserted only after privacy-safe, genuine RC2 screenshots are hosted on a stable HTTPS endpoint. -->
+</component>
