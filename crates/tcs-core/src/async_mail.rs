@@ -2639,11 +2639,23 @@ mod attachment_protocol_tests {
                     .write_all(b"* 2 FETCH (UID 99 FLAGS (\\Seen))\r\n")
                     .unwrap();
             }
-            socket.write_all(fetch.as_bytes()).unwrap();
-            if matches!(reply, Reply::Duplicate) {
-                socket.write_all(fetch.as_bytes()).unwrap();
+            if let Err(e) = socket.write_all(fetch.as_bytes()) {
+                // In the negative fixtures, the IMAP client may legitimately
+                // close the connection as soon as it rejects malformed data.
+                if matches!(reply, Reply::Valid | Reply::UnsolicitedThenValid) {
+                    panic!("valid fixture could not send FETCH: {e}");
+                }
+                return;
             }
-            write!(socket, "{tag} OK FETCH completed\r\n").unwrap();
+            if matches!(reply, Reply::Duplicate) {
+                // Rejection can occur after the first duplicate response.
+                let _ = socket.write_all(fetch.as_bytes());
+            }
+            if let Err(e) = write!(socket, "{tag} OK FETCH completed\r\n") {
+                if matches!(reply, Reply::Valid | Reply::UnsolicitedThenValid) {
+                    panic!("valid fixture could not finish FETCH: {e}");
+                }
+            }
         });
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()

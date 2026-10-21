@@ -2476,6 +2476,9 @@ fn wait_google_loopback_with_timeout(
                 if !peer.ip().is_loopback() {
                     continue;
                 }
+                stream
+                    .set_nonblocking(false)
+                    .map_err(|e| format!("Callback OAuth inválido: {e}"))?;
                 let _ = stream.set_read_timeout(Some(std::time::Duration::from_secs(3)));
                 let mut request = Vec::<u8>::with_capacity(2048);
                 let mut chunk = [0_u8; 2048];
@@ -2487,7 +2490,7 @@ fn wait_google_loopback_with_timeout(
                         break;
                     }
                     request.extend_from_slice(&chunk[..n]);
-                    if request.windows(2).any(|w| w == b"\r\n") || request.len() >= 16_384 {
+                    if request.windows(4).any(|w| w == b"\r\n\r\n") || request.len() >= 16_384 {
                         break;
                     }
                 }
