@@ -155,7 +155,6 @@ mod platform {
     use std::process::{Command, Stdio};
 
     const SCRIPT: &str = r#"
-param([string]$Op,[string]$User)
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 [Console]::InputEncoding = $utf8
 [Console]::OutputEncoding = $utf8
@@ -181,23 +180,46 @@ if($Op -eq 'set'){
 }elseif($Op -eq 'delete'){if(-not [TcsCred]::CredDelete($target,1,0)){exit 4}}
 "#;
 
+    // Windows PowerShell 5.1 does not bind -Op/-User as parameters to a
+    // script supplied via `-Command SCRIPT` in the form previously used here.
+    // Encode the complete command as UTF-16LE Base64 (-EncodedCommand), and
+    // independently encode the account key, preventing PowerShell injection.
+    // The credential VALUE is never included in command arguments: stdin only.
     fn command(op: &str, user: &str) -> Result<std::process::Child, SecretError> {
-        Command::new("powershell.exe")
+        use base64::{engine::general_purpose::STANDARD, Engine as _};
+        use std::os::windows::process::CommandExt;
+
+        if !matches!(op, "set" | "get" | "delete") {
+            return Err(SecretError::Failed("invalid credential operation".into()));
+        }
+        let op64 = STANDARD.encode(op.as_bytes());
+        let user64 = STANDARD.encode(user.as_bytes());
+        let script = format!(
+            "$ErrorActionPreference='Stop'; \
+             $Op=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{op64}')); \
+             $User=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{user64}'));\n{SCRIPT}"
+        );
+        let mut utf16_le = Vec::with_capacity(script.len() * 2);
+        for unit in script.encode_utf16() {
+            utf16_le.extend_from_slice(&unit.to_le_bytes());
+        }
+        let encoded = STANDARD.encode(utf16_le);
+        let mut child = Command::new("powershell.exe");
+        child
             .args([
                 "-NoProfile",
                 "-NonInteractive",
                 "-ExecutionPolicy",
                 "Bypass",
-                "-Command",
-                SCRIPT,
-                "-Op",
-                op,
-                "-User",
-                user,
+                "-EncodedCommand",
+                encoded.as_str(),
             ])
+            // Avoid creating another console window from a GUI application.
+            .creation_flags(0x0800_0000)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
+            .stderr(Stdio::piped());
+        child
             .spawn()
             .map_err(|e| SecretError::MissingTool(e.to_string()))
     }
@@ -257,5 +279,31 @@ mod platform {
     }
     pub fn clear(_: &str) -> Result<(), SecretError> {
         Err(SecretError::MissingTool("unsupported platform".into()))
+    }
+}
+
+// CI regression: credential values must roundtrip on Windows without a console
+// window and without interpreting account keys as PowerShell source. Uses only
+// synthetic, short-lived data; never reads real user credentials.
+#[cfg(all(test, target_os = "windows"))]
+mod windows_credential_tests {
+    use super::SecretStore;
+
+    #[test]
+    fn windows_roundtrip_unicode_and_shell_metacharacters() {
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system clock")
+            .as_nanos();
+        let key = format!("tcs-rc4-ci:{}:{};@'", std::process::id(), stamp);
+        let value = r#"Senha-sintetica | ; ' " $ ( ) ê 漢字 🦀"#;
+        SecretStore::store_secret(&key, value).expect("store synthetic credential");
+        let fetched = SecretStore::lookup_secret(&key).expect("read synthetic credential");
+        assert_eq!(fetched, value, "secret storage roundtrip mismatch");
+        SecretStore::clear_secret(&key).expect("delete synthetic credential");
+        assert!(
+            SecretStore::lookup_secret(&key).is_err(),
+            "credential survived delete"
+        );
     }
 }

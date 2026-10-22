@@ -1,4 +1,4 @@
-name: TCS Mail RC3 - Homologacao e instaladores
+name: TCS Mail RC4 - Homologacao e instaladores
 
 on:
   workflow_dispatch:
@@ -24,7 +24,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: tcsmail-rc3-${{ github.ref }}
+  group: tcsmail-rc4-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -80,15 +80,15 @@ jobs:
         shell: bash
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf appstream rpm2cpio cpio
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf appstream rpm rpm2cpio cpio
       - name: Python 3.12
         uses: actions/setup-python@v7
         with:
           python-version: '3.12'
-      - name: Node 22
-        uses: actions/setup-node@v5
+      - name: Node 24
+        uses: actions/setup-node@v7
         with:
-          node-version: '22'
+          node-version: '24'
           package-manager-cache: false
       - name: Rust estável com Clippy e Rustfmt
         uses: dtolnay/rust-toolchain@stable
@@ -99,7 +99,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: tcsmail-${{ matrix.rust_target }}
-      - name: Contrato RC3 e sintaxe dos scripts
+      - name: Contrato RC4 e sintaxe dos scripts
         shell: bash
         run: |
           set -euo pipefail
@@ -108,7 +108,7 @@ jobs:
           node scripts/quality/rc2-release-contract.mjs
           node scripts/quality/rc2-interface-regression.mjs
           node scripts/quality/rc2-native-composer-behavior.mjs
-          node scripts/quality/rc3-composer-routing.mjs
+          node scripts/quality/rc4-composer-routing.mjs
           python scripts/quality/rc2-presentation-verify.py --source
           python - <<'PY'
           import pathlib, subprocess
@@ -131,7 +131,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cargo tauri build --target '${{ matrix.rust_target }}' --bundles '${{ matrix.bundles }}'
+          if [[ '${{ matrix.kind }}' == 'linux' ]]; then
+            # DEB mantém a versão SemVer original da RC4.
+            cargo tauri build --target '${{ matrix.rust_target }}' --bundles deb
+            # RPM exige Version sem hífen. Release pré-estável ordena antes de 0.8.2-1.
+            # JSON Merge Patch é aplicado somente a esta invocação Tauri.
+            cargo tauri build --target '${{ matrix.rust_target }}' --bundles rpm \
+              --config '{"version":"0.8.2","bundle":{"linux":{"rpm":{"release":"0.rc4.1"}}}}'
+          else
+            cargo tauri build --target '${{ matrix.rust_target }}' --bundles '${{ matrix.bundles }}'
+          fi
       - name: Inspecionar e preparar artefatos / SHA-256
         shell: bash
         run: |
@@ -140,7 +149,7 @@ jobs:
       - name: Enviar artefatos privados (sem Release)
         uses: actions/upload-artifact@v7
         with:
-          name: tcsmail-0.8.2-rc3-${{ matrix.label }}-${{ github.run_number }}
+          name: tcsmail-0.8.2-rc4-${{ matrix.label }}-${{ github.run_number }}
           path: delivery/${{ matrix.label }}/*
           if-no-files-found: error
           retention-days: 14
@@ -154,7 +163,7 @@ jobs:
         shell: bash
         run: |
           {
-            echo '## TCS Mail 0.8.2-rc3 — Resultado'
+            echo '## TCS Mail 0.8.2-rc4 — Resultado'
             echo ''
             echo "- Commit: \`${GITHUB_SHA}\`"
             echo "- Execução: \`${GITHUB_RUN_ID}\`"

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""RC3 release presentation checks. Read-only, no credentials or network.
+"""RC4 release presentation checks. Read-only, no credentials or network.
 
-Usage: python3 scripts/quality/rc3-presentation-verify.py --source
-       python3 scripts/quality/rc3-presentation-verify.py --deb /path/real.deb
-       python3 scripts/quality/rc3-presentation-verify.py --rpm /path/real.rpm
+Usage: python3 scripts/quality/rc2-presentation-verify.py --source
+       python3 scripts/quality/rc2-presentation-verify.py --deb /path/real.deb
+       python3 scripts/quality/rc2-presentation-verify.py --rpm /path/real.rpm
 """
 from pathlib import Path
 from xml.etree import ElementTree as ET
@@ -43,7 +43,7 @@ def metadata_check(xml):
     require(root.find("summary[@{http://www.w3.org/XML/1998/namespace}lang='pt-BR']") is not None,'PT-BR summary missing')
     require(len(root.findall('./description/p'))>=4,'Localized full descriptions missing')
     require(root.findtext("url[@type='homepage']")=='https://thecreativesolver.com/mail','Homepage mismatch')
-    require(root.find("releases/release[@version='0.8.2-rc3']") is not None,'Version metadata mismatch')
+    require(root.find("releases/release[@version='0.8.2-rc4']") is not None,'Version metadata mismatch')
 
 def desktop_check(txt,hidden=False):
     require('[Desktop Entry]' in txt,'Desktop entry missing')
@@ -58,7 +58,7 @@ def desktop_check(txt,hidden=False):
 
 def check_source():
     cfg=json.loads(CONF.read_text())
-    require(cfg['version']=='0.8.2-rc3','Wrong version')
+    require(cfg['version']=='0.8.2-rc4','Wrong version')
     require(cfg['identifier']==IDENT,'Tauri ID changed (risk to existing user data)')
     require('multiplataforma' in cfg['bundle']['shortDescription'].lower(),'Localized tagline missing')
     require('Linux, Windows e macOS' in cfg['bundle']['longDescription'],'Cross-platform description missing')
@@ -84,7 +84,7 @@ def check_source():
             require(png_dimensions(pp.read_bytes())==(sz,sz),f'{kind}: wrong icon size {sz}')
     require('write_support_view' not in (ROOT/'src-tauri/src/lib.rs').read_text(),'Previously reported dead-code helper still exists')
     require((ROOT/'frontend/help_center.js').is_file(),'Help Center is missing')
-    print('PASS: source AppStream, executable identity, official icons, 0.8.2-rc3 and previous lint fix')
+    print('PASS: source AppStream, executable identity, official icons, 0.8.2-rc4 and previous lint fix')
     if shutil.which('appstreamcli'):
         cmd=['appstreamcli','validate','--no-net',str(RES/(IDENT+'.metainfo.xml'))]
         print('Running:',*cmd)
@@ -132,7 +132,7 @@ def verify_deb(path):
 def verify_rpm(path):
     require(shutil.which('rpm2cpio') and shutil.which('cpio'),'Install rpm2cpio and cpio to validate RPM payload.')
     # Extract only in a new temporary directory, not in the user's source or home.
-    with tempfile.TemporaryDirectory(prefix='tcs-rc3-rpm-qa-') as tmp:
+    with tempfile.TemporaryDirectory(prefix='tcs-rc4-rpm-qa-') as tmp:
         a=subprocess.Popen(['rpm2cpio',str(path)],stdout=subprocess.PIPE)
         b=subprocess.run(['cpio','-idm','--quiet','--no-absolute-filenames'],stdin=a.stdout,cwd=tmp,capture_output=True,text=True)
         if a.stdout:a.stdout.close()
