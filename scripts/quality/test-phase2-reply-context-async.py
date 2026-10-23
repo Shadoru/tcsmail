@@ -3,8 +3,8 @@
 from pathlib import Path
 import re
 root=Path(__file__).resolve().parents[2]
-t=(root/'src-tauri/src/lib.rs').read_text()
-a=(root/'crates/tcs-core/src/async_mail.rs').read_text()
+t=(root/'src-tauri/src/lib.rs').read_text(encoding="utf-8")
+a=(root/'crates/tcs-core/src/async_mail.rs').read_text(encoding="utf-8")
 route=t.split('async fn reply_context(',1)[1].split('\n#[tauri::command]',1)[0]
 impl=a.split('pub async fn fetch_reply_to_if_epoch',1)[1].split('/// Retrieve message RFC822 bytes',1)[0]
 def checks(s):

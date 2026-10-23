@@ -1,7 +1,7 @@
 from pathlib import Path
 import re
 p=Path(__file__).resolve().parents[2] / 'crates/tcs-core/src/async_mail.rs'
-s=p.read_text()
+s=p.read_text(encoding="utf-8")
 def body(start, end):
     return s.split(start,1)[1].split(end,1)[0]
 flags=body('pub async fn set_message_flags_uid(', '/// Append complete RFC822 bytes')

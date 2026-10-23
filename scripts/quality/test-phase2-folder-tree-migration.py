@@ -2,8 +2,8 @@
 from pathlib import Path
 import re
 root=Path(__file__).resolve().parents[2]
-a=(root/'crates/tcs-core/src/async_mail.rs').read_text()
-t=(root/'src-tauri/src/lib.rs').read_text()
+a=(root/'crates/tcs-core/src/async_mail.rs').read_text(encoding="utf-8")
+t=(root/'src-tauri/src/lib.rs').read_text(encoding="utf-8")
 signature = re.search(
     r"pub\s+async\s+fn\s+list_folder_tree\s*\(\s*session\s*:\s*&mut\s+SecureSession\s*,?\s*\)",
     a,

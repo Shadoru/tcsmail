@@ -5,8 +5,8 @@ import sqlite3
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[2]
-ops = (root/'crates/tcs-core/src/operations.rs').read_text()
-tauri = (root/'src-tauri/src/lib.rs').read_text()
+ops = (root/'crates/tcs-core/src/operations.rs').read_text(encoding="utf-8")
+tauri = (root/'src-tauri/src/lib.rs').read_text(encoding="utf-8")
 
 sql_match = re.search(r'pub fn quarantine_stale_running\(.*?\.execute\(\s*"([^"]+)"', ops, re.S)
 assert sql_match, 'Recovery SQL must exist in production implementation'

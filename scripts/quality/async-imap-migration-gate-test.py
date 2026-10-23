@@ -9,7 +9,7 @@ assert current.returncode==0,(current.stdout,current.stderr)
 with tempfile.TemporaryDirectory() as temp:
  p=pathlib.Path(temp)
  (p/'crates/tcs-core/src').mkdir(parents=True)
- (p/'crates/tcs-core/Cargo.toml').write_text((root/'crates/tcs-core/Cargo.toml').read_text().replace('[dependencies]','[dependencies]\nimap = "2.4.1"\nimap-proto = "0.10.2"',1))
+ (p/'crates/tcs-core/Cargo.toml').write_text((root/'crates/tcs-core/Cargo.toml').read_text(encoding="utf-8").replace('[dependencies]','[dependencies]\nimap = "2.4.1"\nimap-proto = "0.10.2"',1))
  shutil.copyfile(root/'Cargo.lock',p/'Cargo.lock')
  (p/'crates/tcs-core/src/legacy.rs').write_text('use imap::Client;\n')
  bad=run(p)

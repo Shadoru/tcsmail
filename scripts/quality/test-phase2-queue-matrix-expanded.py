@@ -8,7 +8,7 @@ import re
 import sqlite3
 
 ROOT = Path(__file__).resolve().parents[2]
-source = (ROOT/'crates/tcs-core/src/operations.rs').read_text()
+source = (ROOT/'crates/tcs-core/src/operations.rs').read_text(encoding="utf-8")
 match = re.search(r'let\s+claimed\s*=\s*c\.execute\s*\(\s*"([^"]+)"',source)
 assert match, 'production claim SQL missing'
 claim_sql = match.group(1)

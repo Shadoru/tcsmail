@@ -13,7 +13,7 @@ check('dependency-lockfile',lock.is_file() and lock.stat().st_size>100,'Cargo.lo
 proof=root/'validation/async-imap-compatibility-results.json'
 if proof.exists():
     try:
-        evidence=json.loads(proof.read_text())
+        evidence=json.loads(proof.read_text(encoding="utf-8"))
     except (ValueError,OSError):
         evidence={}
 else:

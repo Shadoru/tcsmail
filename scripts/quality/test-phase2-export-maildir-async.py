@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Static negative/positive routing assertions; Rust compilation is separate."""
 from pathlib import Path
-s = Path('src-tauri/src/lib.rs').read_text()
+s = Path('src-tauri/src/lib.rs').read_text(encoding="utf-8")
 export=s.split('async fn export_message_eml(',1)[1].split('/// Import raw RFC822',1)[0]
 maildir=s.split('async fn import_maildir(',1)[1].split('async fn export_folder_mbox(',1)[0]
 checks={

@@ -3,8 +3,8 @@
 from pathlib import Path
 import sqlite3,re
 root=Path(__file__).resolve().parents[2]
-core=(root/'crates/tcs-core/src/operations.rs').read_text()
-ui=(root/'src-tauri/src/lib.rs').read_text()
+core=(root/'crates/tcs-core/src/operations.rs').read_text(encoding="utf-8")
+ui=(root/'src-tauri/src/lib.rs').read_text(encoding="utf-8")
 select=re.search(r'"(SELECT op_id,account_id,message_id,kind,payload_json FROM pending_operations [^"\n]+)"',core)
 assert select, 'cannot find production SELECT SQL'
 sql=select.group(1)

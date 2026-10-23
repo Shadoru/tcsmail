@@ -3,9 +3,9 @@
 from pathlib import Path
 import re
 root=Path(__file__).resolve().parents[2]
-a=(root/'crates/tcs-core/src/async_mail.rs').read_text()
-s=(root/'crates/tcs-core/src/sync_engine.rs').read_text()
-u=(root/'src-tauri/src/lib.rs').read_text()
+a=(root/'crates/tcs-core/src/async_mail.rs').read_text(encoding="utf-8")
+s=(root/'crates/tcs-core/src/sync_engine.rs').read_text(encoding="utf-8")
+u=(root/'src-tauri/src/lib.rs').read_text(encoding="utf-8")
 method=a.split('pub async fn sync_folder_before<T>(',1)[1].split('\n#[cfg(test)]',1)[0]
 worker=s.split('pub async fn backfill_async(',1)[1].split(' pub fn reconcile_folder(',1)[0]
 # Read the whole Tauri command body, not its first source line: rustfmt may

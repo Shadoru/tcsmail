@@ -2,7 +2,7 @@
 """Structural regression guard, not a substitute for Rust/server integration tests."""
 from pathlib import Path
 root = Path(__file__).resolve().parents[2]
-src = (root / 'src-tauri/src/lib.rs').read_text()
+src = (root / 'src-tauri/src/lib.rs').read_text(encoding="utf-8")
 head = src.index('async fn attach_message_as_eml(')
 end = src.index('\n#[tauri::command]', head)
 fn = src[head:end]

@@ -19,7 +19,7 @@ with tempfile.TemporaryDirectory() as temp:
         db.execute('CREATE TABLE messages(id INTEGER PRIMARY KEY, body TEXT)')
         db.execute('INSERT INTO messages(body) VALUES (?)', ('preserve-me',))
     backup.snapshot(src, dst)
-    base = json.loads((dst / 'snapshot-manifest.json').read_text())
+    base = json.loads((dst / 'snapshot-manifest.json').read_text(encoding="utf-8"))
     assert len(backup.verify(dst)) == 1
     # Payload must never affect files outside backup directory.
     for bad in ('../escape.db', '/tmp/outside.db', '..\\escape.db', '.hidden.db', 'nested/path.db'):

@@ -3,7 +3,7 @@
 from pathlib import Path
 import hashlib, tempfile
 root = Path(__file__).resolve().parents[2]
-source = (root/'scripts/quality/async-imap-complete-acceptance.py').read_text()
+source = (root/'scripts/quality/async-imap-complete-acceptance.py').read_text(encoding="utf-8")
 assert "item.get('exit_code') == 0" in source
 assert "candidate.is_relative_to((root/'validation').resolve())" in source
 assert "hashlib.sha256(candidate.read_bytes()).hexdigest() == item['sha256']" in source

@@ -5,7 +5,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--root', type=pathlib.Path)
 args = parser.parse_args()
 ROOT = args.root.resolve() if args.root else pathlib.Path(__file__).resolve().parents[2]
-core=tomllib.loads((ROOT/'crates/tcs-core/Cargo.toml').read_text())
+core=tomllib.loads((ROOT/'crates/tcs-core/Cargo.toml').read_text(encoding="utf-8"))
 manifest=core['dependencies']
 found=[]
 if 'imap' in manifest: found.append('Direct legacy dependency: imap')
@@ -14,7 +14,7 @@ ai=manifest.get('async-imap')
 if not isinstance(ai,dict) or ai.get('version') not in ('=0.11.3', '=0.12.0'): found.append('async-imap must be pinned to a reviewed release (=0.11.3 or =0.12.0)')
 if isinstance(ai,dict) and ai.get('optional',False): found.append('async-imap still optional, not production backend')
 for p in sorted((ROOT/'crates').rglob('*.rs')):
-    s=p.read_text()
+    s=p.read_text(encoding="utf-8")
     for pattern in (r'\buse imap::',r'\bimap::',r'(?<![\w:])imap_proto::',r'\buse imap_proto::'):
         n=len(re.findall(pattern,s))
         if n: found.append(f'{p.relative_to(ROOT)} contains {n} legacy references for {pattern}')
@@ -23,7 +23,7 @@ if not lock_path.exists():
     found.append('Cargo.lock missing: dependency resolution not verified')
 else:
     try:
-        lock = tomllib.loads(lock_path.read_text())
+        lock = tomllib.loads(lock_path.read_text(encoding="utf-8"))
         packages = lock.get('package', [])
         legacy_imap = sorted({p['version'] for p in packages if p.get('name') == 'imap'})
         proto_versions = sorted({p['version'] for p in packages if p.get('name') == 'imap-proto'})

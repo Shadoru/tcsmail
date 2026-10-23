@@ -3,9 +3,9 @@
 from pathlib import Path
 import sys,tomllib
 root=Path(__file__).resolve().parents[2]
-manifest=tomllib.loads((root/'crates/tcs-core/Cargo.toml').read_text())
+manifest=tomllib.loads((root/'crates/tcs-core/Cargo.toml').read_text(encoding="utf-8"))
 dep=manifest['dependencies']['async-imap']
-source=(root/'crates/tcs-core/src/async_mail.rs').read_text()
+source=(root/'crates/tcs-core/src/async_mail.rs').read_text(encoding="utf-8")
 checks={
  'Pinned async-imap 0.12.0':dep.get('version')=='=0.12.0',
  'Tokio runtime enabled':dep.get('default-features') is False and 'runtime-tokio' in dep.get('features',[]),

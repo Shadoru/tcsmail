@@ -4,8 +4,8 @@ from pathlib import Path
 import re
 
 root = Path(__file__).resolve().parents[2]
-a = (root/'crates/tcs-core/src/async_mail.rs').read_text()
-o = (root/'crates/tcs-core/src/operations.rs').read_text()
+a = (root/'crates/tcs-core/src/async_mail.rs').read_text(encoding="utf-8")
+o = (root/'crates/tcs-core/src/operations.rs').read_text(encoding="utf-8")
 
 
 def function(source, name):

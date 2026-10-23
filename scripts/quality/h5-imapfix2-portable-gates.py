@@ -3,7 +3,7 @@
 from pathlib import Path
 import subprocess,sys
 root=Path(__file__).resolve().parents[2]
-source=(root/'scripts/quality/run-imap-012-full-evaluation.sh').read_text()
+source=(root/'scripts/quality/run-imap-012-full-evaluation.sh').read_text(encoding="utf-8")
 part=source.split('for test in \\\n',1)
 # This script deliberately lists targets through parsing the documented shell gate.
 if len(part)!=2:

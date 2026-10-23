@@ -3,7 +3,7 @@
 from pathlib import Path
 import re
 
-src = (Path(__file__).resolve().parents[2] / 'crates/tcs-core/src/operations.rs').read_text()
+src = (Path(__file__).resolve().parents[2] / 'crates/tcs-core/src/operations.rs').read_text(encoding="utf-8")
 compact = re.sub(r'\s+', '', src)
 remote = compact.split('fnremote_async_mutation(', 1)[1].split('implOperationQueue', 1)[0]
 flags = compact.split('"flags"=>{', 1)[1].split('"delete"=>{', 1)[0]

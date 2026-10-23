@@ -3,8 +3,8 @@
 from pathlib import Path
 import tomllib
 root=Path(__file__).resolve().parents[2]
-source=(root/'crates/tcs-core/src/async_mail.rs').read_text()
-core=tomllib.loads((root/'crates/tcs-core/Cargo.toml').read_text())
+source=(root/'crates/tcs-core/src/async_mail.rs').read_text(encoding="utf-8")
+core=tomllib.loads((root/'crates/tcs-core/Cargo.toml').read_text(encoding="utf-8"))
 deps=core['dependencies']
 ai=deps['async-imap']
 assert ai['version']=='=0.12.0'

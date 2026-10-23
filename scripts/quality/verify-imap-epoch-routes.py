@@ -4,9 +4,9 @@ This supplements, never replaces, the Rust TCP fixtures and live server tests.
 """
 import pathlib, re, tomllib
 root = pathlib.Path(__file__).resolve().parents[2]
-core = (root/'crates/tcs-core/src/async_mail.rs').read_text()
-frontend = (root/'src-tauri/src/lib.rs').read_text()
-lock = tomllib.loads((root/'Cargo.lock').read_text())['package']
+core = (root/'crates/tcs-core/src/async_mail.rs').read_text(encoding="utf-8")
+frontend = (root/'src-tauri/src/lib.rs').read_text(encoding="utf-8")
+lock = tomllib.loads((root/'Cargo.lock').read_text(encoding="utf-8"))['package']
 assert [p['version'] for p in lock if p['name']=='async-imap']==['0.12.0']
 assert [p['version'] for p in lock if p['name']=='imap-proto']==['0.17.0']
 assert not [p for p in lock if p['name']=='imap']

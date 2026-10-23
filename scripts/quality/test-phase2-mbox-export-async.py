@@ -8,9 +8,9 @@ from pathlib import Path
 import re
 
 ROOT = Path(__file__).resolve().parents[2]
-source = (ROOT / 'src-tauri/src/lib.rs').read_text()
-manifest = (ROOT / 'src-tauri/Cargo.toml').read_text()
-runner = (ROOT / 'scripts/quality/run-imap-012-full-evaluation.sh').read_text()
+source = (ROOT / 'src-tauri/src/lib.rs').read_text(encoding="utf-8")
+manifest = (ROOT / 'src-tauri/Cargo.toml').read_text(encoding="utf-8")
+runner = (ROOT / 'scripts/quality/run-imap-012-full-evaluation.sh').read_text(encoding="utf-8")
 start = source.index('async fn export_folder_mbox(')
 end = source.index('\n\n#[tauri::command]', start)
 route = source[start:end]

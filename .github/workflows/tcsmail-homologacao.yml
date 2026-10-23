@@ -70,6 +70,8 @@ jobs:
       matrix: ${{ fromJSON(needs.selecionar.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 120
+    env:
+      PYTHONUTF8: "1"
     steps:
       - name: Checkout exato do commit
         uses: actions/checkout@v5
@@ -104,6 +106,7 @@ jobs:
         run: |
           set -euo pipefail
           python scripts/quality/tcsmail-package-guard.py --source
+          python scripts/quality/test_utf8_ci_sources.py
           python scripts/quality/rc5-providers-and-release.py
           python scripts/quality/test_tcsmail_package_guard.py
           node scripts/verify-ms-oauth.mjs

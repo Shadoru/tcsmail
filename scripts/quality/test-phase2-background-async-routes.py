@@ -2,7 +2,7 @@
 """Conservative production-route check; never substitutes for runtime IMAP tests."""
 from pathlib import Path
 import re
-source=(Path(__file__).resolve().parents[2]/'src-tauri/src/lib.rs').read_text()
+source=(Path(__file__).resolve().parents[2]/'src-tauri/src/lib.rs').read_text(encoding="utf-8")
 tick=source[source.index('pub fn background_tick()'):source.index('pub fn background_idle()')]
 idle=source[source.index('pub fn background_idle()'):source.index('pub fn migrate_ai_only()')]
 tick_flat=re.sub(r'\s+', '', tick)

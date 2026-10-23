@@ -31,6 +31,8 @@ Aplicável a todas as alterações deste repositório. Este arquivo orienta agen
 
 ## Gates e anti-recorrência
 
+- Todos os scripts Python de CI devem ler arquivos UTF-8 com `Path.read_text(encoding="utf-8")`; evitar a codificação padrão do Windows. O workflow deve ativar `PYTHONUTF8=1` e executar `test_utf8_ci_sources.py` em todos os runners.
+
 - Contratos CI de Rust não devem exigir espaçamento literal de chamadas formatadas por rustfmt; usar verificações estruturais que aceitem quebras de linha e vírgulas finais, e testar as duas formas.
 
 Antes de commit / push (no Ubuntu, com CARGO_HOME/RUSTUP_HOME isolados):

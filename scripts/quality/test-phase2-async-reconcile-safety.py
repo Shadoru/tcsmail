@@ -2,7 +2,7 @@
 """Conservative guards for production async reconciliation. Not a live IMAP test."""
 from pathlib import Path
 import re
-s=(Path(__file__).resolve().parents[2]/'crates/tcs-core/src/sync_engine.rs').read_text()
+s=(Path(__file__).resolve().parents[2]/'crates/tcs-core/src/sync_engine.rs').read_text(encoding="utf-8")
 start=s.index('pub async fn reconcile_folder_async(')
 end=s.index('pub fn hydrate_message(',start)
 body=s[start:end]

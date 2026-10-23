@@ -2,9 +2,9 @@
 """Structural regression assertions; not a substitute for Rust tests."""
 from pathlib import Path
 root = Path(__file__).resolve().parents[2]
-db = (root / 'crates/tcs-core/src/db.rs').read_text()
-store = (root / 'crates/tcs-core/src/store.rs').read_text()
-engine = (root / 'crates/tcs-core/src/sync_engine.rs').read_text()
+db = (root / 'crates/tcs-core/src/db.rs').read_text(encoding="utf-8")
+store = (root / 'crates/tcs-core/src/store.rs').read_text(encoding="utf-8")
+engine = (root / 'crates/tcs-core/src/sync_engine.rs').read_text(encoding="utf-8")
 assert 'pub(crate) fn upsert_message_in_tx' in db
 assert 'Self::upsert_message_in_tx(&tx, m)?;' in db
 assert 'Database::upsert_message_in_tx(&tx, message)' in store

@@ -7,7 +7,7 @@ This does not substitute for native WebKitGTK UI testing.
 """
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[2]
-css=(ROOT/'frontend/styles.css').read_text()
+css=(ROOT/'frontend/styles.css').read_text(encoding="utf-8")
 assert 'color-mix(in srgb,var(--side-text) 15%,var(--side))' in css
 assert 'html[data-theme="system"]{\n  --side-text:#eef1f4;' in css
 colors={

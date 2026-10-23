@@ -3,7 +3,7 @@
 from pathlib import Path
 import re,sqlite3
 root=Path(__file__).resolve().parents[2]
-s=(root/'crates/tcs-core/src/operations.rs').read_text()
+s=(root/'crates/tcs-core/src/operations.rs').read_text(encoding="utf-8")
 statements=re.findall(r'"(UPDATE pending_operations SET [^"\n]+)"',s)
 success=next(x for x in statements if "state='done'" in x)
 failure=next(x for x in statements if 'state=?2' in x and 'last_error=?4' in x)

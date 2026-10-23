@@ -40,7 +40,7 @@ with tempfile.TemporaryDirectory() as tmp:
         pass
     bad = base/'bad'
     manifest = backups/'snapshot-manifest.json'
-    old = manifest.read_text()
+    old = manifest.read_text(encoding="utf-8")
     data = json.loads(old); data['schema'] = True
     manifest.write_text(json.dumps(data))
     try:

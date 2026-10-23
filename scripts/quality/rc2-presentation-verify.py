@@ -57,15 +57,15 @@ def desktop_check(txt,hidden=False):
         require('NoDisplay=true' not in txt,'Visible app launcher is hidden')
 
 def check_source():
-    cfg=json.loads(CONF.read_text())
+    cfg=json.loads(CONF.read_text(encoding="utf-8"))
     require(cfg['version']=='0.8.2-rc5','Wrong version')
     require(cfg['identifier']==IDENT,'Tauri ID changed (risk to existing user data)')
     require('multiplataforma' in cfg['bundle']['shortDescription'].lower(),'Localized tagline missing')
     require('Linux, Windows e macOS' in cfg['bundle']['longDescription'],'Cross-platform description missing')
     require('IA' in cfg['bundle']['longDescription'],'Optional AI missing')
     metadata_check((RES/(IDENT+'.metainfo.xml')).read_bytes())
-    desktop_check((RES/(IDENT+'.desktop')).read_text())
-    desktop_check((RES/'tcs-generated-hidden.desktop.hbs').read_text(),hidden=True)
+    desktop_check((RES/(IDENT+'.desktop')).read_text(encoding="utf-8"))
+    desktop_check((RES/'tcs-generated-hidden.desktop.hbs').read_text(encoding="utf-8"),hidden=True)
     for kind in ['deb','rpm']:
         node=cfg['bundle']['linux'][kind]
         require(node['desktopTemplate']=='resources/tcs-generated-hidden.desktop.hbs',f'{kind}: hidden generator template missing')
@@ -82,7 +82,7 @@ def check_source():
             pp=ROOT/'src-tauri'/paths[key]
             require(pp.is_file(),f'{kind}: icon source missing: {pp}')
             require(png_dimensions(pp.read_bytes())==(sz,sz),f'{kind}: wrong icon size {sz}')
-    require('write_support_view' not in (ROOT/'src-tauri/src/lib.rs').read_text(),'Previously reported dead-code helper still exists')
+    require('write_support_view' not in (ROOT/'src-tauri/src/lib.rs').read_text(encoding="utf-8"),'Previously reported dead-code helper still exists')
     require((ROOT/'frontend/help_center.js').is_file(),'Help Center is missing')
     print('PASS: source AppStream, executable identity, official icons, 0.8.2-rc5 and previous lint fix')
     if shutil.which('appstreamcli'):

@@ -72,13 +72,13 @@ class MacBundlePreparationTests(unittest.TestCase):
                     self.assertEqual(set(z.namelist()), {'TCS Mail.app.zip', dmg.name})
                     with zipfile.ZipFile(z.open('TCS Mail.app.zip')) as app_archive:
                         self.assertIn('TCS Mail.app/Contents/MacOS/tcs-mail', app_archive.namelist())
-                info = json.loads((result / 'build-info.json').read_text())
+                info = json.loads((result / 'build-info.json').read_text(encoding="utf-8"))
                 self.assertEqual(info['github_sha'], args.sha)
                 self.assertEqual(info['version'], '0.8.2-rc5')
                 self.assertEqual({f['kind'] for f in info['files']}, {'app', 'dmg'})
                 digest = hashlib.sha256(package.read_bytes()).hexdigest()
                 self.assertEqual(info['zip_sha256'], digest)
-                self.assertEqual((result / (package.name + '.sha256')).read_text().split()[0], digest)
+                self.assertEqual((result / (package.name + '.sha256')).read_text(encoding="utf-8").split()[0], digest)
                 self.assertFalse((result / 'TCS Mail.app.zip').exists(), 'Intermediate .app ZIP must be removed')
 
     def test_missing_dmg_is_rejected_not_uploaded(self):

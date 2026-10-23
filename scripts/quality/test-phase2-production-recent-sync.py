@@ -3,8 +3,8 @@
 from pathlib import Path
 import re
 root=Path(__file__).resolve().parents[2]
-engine=(root/'crates/tcs-core/src/sync_engine.rs').read_text()
-ui=(root/'src-tauri/src/lib.rs').read_text()
+engine=(root/'crates/tcs-core/src/sync_engine.rs').read_text(encoding="utf-8")
+ui=(root/'src-tauri/src/lib.rs').read_text(encoding="utf-8")
 method=re.search(r'pub async fn sync_recent_async\s*\(',engine)
 assert method, 'Missing production async recent sync implementation'
 start=method.start()
