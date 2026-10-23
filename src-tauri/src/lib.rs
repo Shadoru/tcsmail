@@ -1048,7 +1048,25 @@ async fn list_system_fonts() -> Result<Vec<String>, String> {
         #[cfg(target_os="macos")]
         { if let Ok(out)=std::process::Command::new("system_profiler").arg("SPFontsDataType").output(){if out.status.success(){for line in String::from_utf8_lossy(&out.stdout).lines(){let v=line.trim();if v.ends_with(':')&&!v.contains("Fonts:"){fonts.push(v.trim_end_matches(':').to_string())}}}} }
         #[cfg(target_os="windows")]
-        { let script=r#"(Get-ItemProperty 'HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Fonts').PSObject.Properties | Where-Object {$_.Name -notmatch '^PS'} | ForEach-Object {$_.Name -replace ' \\(.+?\\)$',''}"#;if let Ok(out)=std::process::Command::new("powershell").args(["-NoProfile","-Command",script]).output(){if out.status.success(){fonts.extend(String::from_utf8_lossy(&out.stdout).lines().map(|v|v.trim().to_string()).filter(|v|!v.is_empty()))}} }
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+            let script = r#"(Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts').PSObject.Properties | Where-Object {$_.Name -notmatch '^PS'} | ForEach-Object {$_.Name -replace ' \(.+?\)$',''}"#;
+            if let Ok(out) = std::process::Command::new("powershell.exe")
+                .args(["-NoProfile", "-NonInteractive", "-Command", script])
+                .creation_flags(CREATE_NO_WINDOW)
+                .output()
+            {
+                if out.status.success() {
+                    fonts.extend(
+                        String::from_utf8_lossy(&out.stdout)
+                            .lines()
+                            .map(|v| v.trim().to_string())
+                            .filter(|v| !v.is_empty()),
+                    );
+                }
+            }
+        }
         if fonts.is_empty(){fonts=["Sans","Serif","Monospace","Arial","Helvetica","Verdana","Tahoma","Trebuchet MS","Georgia","Times New Roman","Courier New"].into_iter().map(str::to_string).collect();}
         fonts.sort_by_key(|v|v.to_ascii_lowercase());fonts.dedup_by(|a,b|a.eq_ignore_ascii_case(b));fonts.truncate(300);Ok(fonts)
     }).await.map_err(|e|e.to_string())?
@@ -1114,15 +1132,55 @@ async fn sync_recent(
     let sync = st.sync.clone();
     let folder_for_sync = folder.clone();
     let result = sync
-        .sync_recent_async(account_id, &folder_for_sync, 300)
+        .sync_recent_async(account_id, &folder_for_sync, 100)
         .await?;
-    let now = Local::now().timestamp();
-    if st.store.last_reconcile_ts(account_id, &folder).unwrap_or(0) < now - 900 {
-        let _ = st.sync.reconcile_folder_async(account_id, &folder).await;
+    // RC5: return the validated first page as soon as its guarded SQLite commit
+    // finishes. Reconciliation and rules are maintenance work; they must never
+    // block first paint for Gmail All Mail, Microsoft or generic IMAP.
+    // Only one maintenance job per account/folder. Multiple incremental pages
+    // must not spawn an unbounded queue of full-folder reconciliations.
+    static MAINTENANCE: std::sync::OnceLock<
+        std::sync::Mutex<std::collections::HashSet<(i64, String)>>,
+    > = std::sync::OnceLock::new();
+    let key = (account_id, folder.clone());
+    let scheduled = MAINTENANCE
+        .get_or_init(|| std::sync::Mutex::new(std::collections::HashSet::new()))
+        .lock()
+        .map(|mut pending| pending.insert(key.clone()))
+        .unwrap_or(false);
+    if scheduled {
+        let background = st.clone();
+        tauri::async_runtime::spawn(async move {
+            // Keep maintenance off the first-paint critical path. Operations still
+            // serialize through the account coordinator and validate UIDVALIDITY.
+            tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+            let now = Local::now().timestamp();
+            if background
+                .store
+                .last_reconcile_ts(account_id, &folder)
+                .unwrap_or(0)
+                < now - 900
+            {
+                if let Err(error) = background
+                    .sync
+                    .reconcile_folder_async(account_id, &folder)
+                    .await
+                {
+                    eprintln!("TCS Mail: reconciliação IMAP adiada/não concluída: {error}");
+                }
+            }
+            let rules_state = background.clone();
+            let _ = tauri::async_runtime::spawn_blocking(move || {
+                process_rules(&rules_state, account_id)
+            })
+            .await;
+            if let Some(lock) = MAINTENANCE.get() {
+                if let Ok(mut pending) = lock.lock() {
+                    pending.remove(&key);
+                }
+            }
+        });
     }
-    let rules_state = st.clone();
-    let _ =
-        tauri::async_runtime::spawn_blocking(move || process_rules(&rules_state, account_id)).await;
     Ok(result)
 }
 #[tauri::command]
@@ -1132,7 +1190,7 @@ async fn sync_backfill(
     state: State<'_, AppState>,
 ) -> Result<SyncProgress, String> {
     let e = state.sync.clone();
-    e.backfill_async(account_id, &folder, 500).await
+    e.backfill_async(account_id, &folder, 100).await
 }
 
 #[tauri::command]
@@ -3233,12 +3291,19 @@ async fn set_background_enabled(enabled: bool, state: State<'_, AppState>) -> Re
             let exe = exe.display().to_string();
             let background_cmd = format!("\"{exe}\" --background-tick");
             let idle_cmd = format!("\"{exe}\" --idle-watch");
+            use std::os::windows::process::CommandExt;
+            let task = |args: &[&str]| {
+                std::process::Command::new("schtasks.exe")
+                    .args(args)
+                    .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
+                    .status()
+            };
             if enabled {
-                let _ = std::process::Command::new("schtasks.exe").args(["/Create","/F","/SC","MINUTE","/MO","2","/TN","TCSMail08Background","/TR",&background_cmd]).status();
-                let _ = std::process::Command::new("schtasks.exe").args(["/Create","/F","/SC","ONLOGON","/TN","TCSMail08Idle","/TR",&idle_cmd]).status();
+                let _ = task(&["/Create", "/F", "/SC", "MINUTE", "/MO", "2", "/TN", "TCSMail08Background", "/TR", &background_cmd]);
+                let _ = task(&["/Create", "/F", "/SC", "ONLOGON", "/TN", "TCSMail08Idle", "/TR", &idle_cmd]);
             } else {
-                let _ = std::process::Command::new("schtasks.exe").args(["/Delete","/F","/TN","TCSMail08Background"]).status();
-                let _ = std::process::Command::new("schtasks.exe").args(["/Delete","/F","/TN","TCSMail08Idle"]).status();
+                let _ = task(&["/Delete", "/F", "/TN", "TCSMail08Background"]);
+                let _ = task(&["/Delete", "/F", "/TN", "TCSMail08Idle"]);
             }
         }
         #[cfg(target_os = "macos")]
@@ -4684,11 +4749,15 @@ async fn open_received_attachment(
             .spawn()
             .map_err(|e| e.to_string())?;
         #[cfg(target_os = "windows")]
-        std::process::Command::new("cmd.exe")
-            .args(["/C", "start", ""])
-            .arg(&path)
-            .spawn()
-            .map_err(|e| e.to_string())?;
+        {
+            use std::os::windows::process::CommandExt;
+            std::process::Command::new("cmd.exe")
+                .args(["/C", "start", ""])
+                .arg(&path)
+                .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
+                .spawn()
+                .map_err(|e| e.to_string())?;
+        }
         Ok(())
     })
     .await

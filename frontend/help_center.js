@@ -1075,7 +1075,7 @@ GUIDES["pt-BR"].push(...[
   [
    "Abra Configurações",
    "Entre em Sobre",
-   "Confira se aparece 0.8.2-rc4 e o site oficial",
+   "Confira se aparece 0.8.2-rc5 e o site oficial",
    "Se for outra versão, não apague as contas: confira o instalador"
   ],
   "A versão do aplicativo é diferente do número do pacote de origem."
@@ -2406,7 +2406,7 @@ GUIDES["pt-BR"].push(...[
   "Como verificar se estou na versão nova no TCS Mail.",
   [
    "Abra Sobre no TCS Mail",
-   "Confira 0.8.2-rc4",
+   "Confira 0.8.2-rc5",
    "No Linux, verifique o executável via command -v tcs-mail",
    "Não desinstale outra versão sem identificar seus caminhos"
   ],
@@ -2469,7 +2469,7 @@ GUIDES["en-US"].push(...[
   [
    "Open Settings",
    "Choose About",
-   "Check for version 0.8.2-rc4 and the official website",
+   "Check for version 0.8.2-rc5 and the official website",
    "If it differs, inspect the installer without deleting accounts"
   ],
   "The app version can differ from the source archive label."
@@ -3800,7 +3800,7 @@ GUIDES["en-US"].push(...[
   "How to verify the newly installed app in TCS Mail.",
   [
    "Open About in TCS Mail",
-   "Check 0.8.2-rc4",
+   "Check 0.8.2-rc5",
    "On Linux, locate the executable with command -v tcs-mail",
    "Do not uninstall unknown versions by guessing paths"
   ],

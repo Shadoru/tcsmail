@@ -828,3 +828,48 @@ html[data-theme="graphite"] .settingsModal{--reader:#e9edf1;--surface:#f7f8fa;--
 .tcsHelpPage .tcsHelpMore:hover,.tcsHelpPage .tcsHelpMore:focus-visible{border-color:var(--accent);outline-offset:2px}
 .tcsHelpPage .tcsHelpMore[hidden]{display:none}
 .tcsHelpPage .tcsHelpToolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:48px}
+
+/* RC5: native WebView2/WebKit/GTK controls must honor the active theme. */
+html[data-theme="dark"],html[data-theme="dark"] select,html[data-theme="dark"] option,
+html[data-theme="dark"] input[type="datetime-local"],html[data-theme="dark"] input[type="date"],
+html[data-theme="dark"] input[type="time"]{color-scheme:dark}
+html[data-theme="dark"] .selectShell .selectButton,
+html[data-theme="dark"] .selectShell .selectPopup,
+html[data-theme="dark"] .selectShell .selectPopup button,
+html[data-theme="dark"] select,html[data-theme="dark"] select option,
+html[data-theme="dark"] select optgroup{
+ background-color:var(--surface-strong)!important;color:var(--text)!important;
+ border-color:var(--border)!important;
+}
+html[data-theme="dark"] .selectPopup button:hover,
+html[data-theme="dark"] .selectPopup button.active,
+html[data-theme="dark"] .selectPopup button.keyboardActive{
+ background:color-mix(in srgb,var(--accent) 24%,var(--surface-strong))!important;
+ color:var(--text)!important;
+}
+.selectShell .selectButton:focus-visible,.selectPopup button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.composeTop .selectShell,.composeToolbar .selectShell{max-width:100%;min-width:0}
+.composeToolbar{max-width:100%;min-width:0;flex-wrap:wrap!important;overflow:visible!important}
+.composeToolbar .selectPopup{min-width:min(180px,80vw);max-width:min(320px,80vw)}
+.composerNative,.composeTop,.modalBody{min-width:0;max-width:100%}
+.composerNative{overflow-x:clip}
+
+/* RC5: theme-aware selector surface (works when System resolves to dark). */
+@media (prefers-color-scheme: dark) {
+  html[data-theme="system"] { color-scheme: dark; --surface-strong:#242a30; --surface:#1d2125; --text:#eef1f4; --muted:#a8b0b8; }
+  html[data-theme="system"] .selectShell .selectButton,
+  html[data-theme="system"] .selectPopup,
+  html[data-theme="system"] .selectPopup button,
+  html[data-theme="system"] select,
+  html[data-theme="system"] select option {
+    background:#242a30!important;color:#eef1f4!important;
+  }
+  html[data-theme="system"] .selectPopup button:hover,
+  html[data-theme="system"] .selectPopup button.active {background:#33475c!important;color:#fff!important}
+}
+/* Keep form controls legible even when native WebView popup styling differs. */
+html[data-theme="dark"] .fromLine .selectButton,
+html[data-theme="dark"] .composeToolbar .selectButton,
+html[data-theme="dark"] .sendOptionsPopover .selectButton{background:#242a30!important;color:#eef1f4!important}
+.composerNative, .composeContent, .composeEditor, .composeToolbar{min-width:0;max-width:100%}
+.composeToolbar{row-gap:6px}

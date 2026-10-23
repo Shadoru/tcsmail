@@ -4658,7 +4658,7 @@ dependencies = [
 
 [[package]]
 name = "tcs-ai-core"
-version = "0.8.2-rc4"
+version = "0.8.2-rc5"
 dependencies = [
  "chrono",
  "reqwest 0.12.28",
@@ -4673,7 +4673,7 @@ dependencies = [
 
 [[package]]
 name = "tcs-core"
-version = "0.8.2-rc4"
+version = "0.8.2-rc5"
 dependencies = [
  "async-imap",
  "base64 0.22.1",
@@ -4699,7 +4699,7 @@ dependencies = [
 
 [[package]]
 name = "tcs-mail"
-version = "0.8.2-rc4"
+version = "0.8.2-rc5"
 dependencies = [
  "base64 0.22.1",
  "chrono",

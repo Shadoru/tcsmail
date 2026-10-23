@@ -1,0 +1,11 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+const main=fs.readFileSync(new URL('../../frontend/main.js', import.meta.url),'utf8');
+assert.match(main,/async function currentComposerSurface/);
+assert.match(main,/await invoke\('get_setting_value',\{key:'composition.reply_surface'\}\)/);
+assert.match(main,/if\(destination==='inline'\)/);
+assert.match(main,/return openInlineComposer\(seed\)/);
+assert.match(main,/await openNativeComposer\(ctx,seed\)/);
+assert.match(main,/async function openResponseComposer\(seed\)\{\s*return openComposer\(ctx,seed\)/);
+assert.doesNotMatch(main,/replySurfacePreference/);
+console.log('PASS: RC5 composer reads persisted setting at activation, inline and native both reachable');

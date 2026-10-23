@@ -383,6 +383,67 @@ where
 
 /// Folder hierarchy with subscription and SPECIAL-USE attributes preserved.
 /// LIST and LSUB failures are propagated: never silently mark all folders unsubscribed.
+/// Decode IMAP4rev1 modified UTF-7 for DISPLAY ONLY (RFC 3501 §5.1.3).
+/// The original LIST mailbox name is retained for SELECT/FETCH, SQLite keys and
+/// SPECIAL-USE mappings. UTF8=ACCEPT/IMAP4rev2 names already in UTF-8 pass through.
+fn display_mailbox_name(raw: &str) -> String {
+    use base64::engine::general_purpose::STANDARD;
+    use base64::Engine;
+    let mut result = String::with_capacity(raw.len());
+    let mut rest = raw;
+    while let Some(start) = rest.find('&') {
+        result.push_str(&rest[..start]);
+        rest = &rest[start + 1..];
+        let Some(end) = rest.find('-') else {
+            // Malformed segment: fail closed for presentation, never change IDs.
+            result.push('&');
+            result.push_str(rest);
+            return result;
+        };
+        if end == 0 {
+            result.push('&');
+        } else {
+            let fragment = &rest[..end];
+            let encoded = fragment.replace(',', "/");
+            let padded = format!("{}{}", encoded, "=".repeat((4 - encoded.len() % 4) % 4));
+            let decoded = STANDARD.decode(padded.as_bytes()).ok().and_then(|bytes| {
+                if bytes.len() % 2 != 0 || bytes.is_empty() {
+                    return None;
+                }
+                let utf16 = bytes
+                    .chunks_exact(2)
+                    .map(|pair| u16::from_be_bytes([pair[0], pair[1]]));
+                String::from_utf16(&utf16.collect::<Vec<_>>()).ok()
+            });
+            match decoded {
+                Some(text) if !text.chars().any(char::is_control) => result.push_str(&text),
+                _ => {
+                    result.push('&');
+                    result.push_str(fragment);
+                    result.push('-');
+                }
+            }
+        }
+        rest = &rest[end + 1..];
+    }
+    result.push_str(rest);
+    result
+}
+
+#[cfg(test)]
+mod mailbox_display_tests {
+    use super::display_mailbox_name;
+
+    #[test]
+    fn decodes_modified_utf7_but_preserves_utf8_and_invalid_sequences() {
+        assert_eq!(display_mailbox_name("Seguran&AOc-a"), "Segurança");
+        assert_eq!(display_mailbox_name("R&-D &- Testes"), "R&D & Testes");
+        assert_eq!(display_mailbox_name("Enviados"), "Enviados");
+        assert_eq!(display_mailbox_name("Ação"), "Ação");
+        assert_eq!(display_mailbox_name("&garbage"), "&garbage");
+    }
+}
+
 pub async fn list_folder_tree(
     session: &mut SecureSession,
 ) -> Result<Vec<crate::mail::FolderInfo>, MailError> {
@@ -419,8 +480,11 @@ pub async fn list_folder_tree(
         let display_name = delimiter
             .as_deref()
             .and_then(|d| (!d.is_empty()).then_some(d))
-            .and_then(|d| full.rsplit_once(d).map(|(_, tail)| tail.to_string()))
-            .unwrap_or_else(|| full.clone());
+            .and_then(|d| {
+                full.rsplit_once(d)
+                    .map(|(_, tail)| display_mailbox_name(tail))
+            })
+            .unwrap_or_else(|| display_mailbox_name(&full));
         folders.push(crate::mail::FolderInfo {
             name: full.clone(),
             display_name,

@@ -1,0 +1,21 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+const ui=fs.readFileSync(new URL('../../frontend/main.js',import.meta.url),'utf8');
+const backend=fs.readFileSync(new URL('../../src-tauri/src/lib.rs',import.meta.url),'utf8');
+const mail=fs.readFileSync(new URL('../../crates/tcs-core/src/async_mail.rs',import.meta.url),'utf8');
+const css=fs.readFileSync(new URL('../../frontend/styles.css',import.meta.url),'utf8');
+// Provider-neutral path, first page and safe UI classification.
+assert.match(ui,/const recentLimit=manual\?10:1,historyLimit=manual\?10:0/);
+assert.match(ui,/folderInitialSyncKey/);
+assert.match(ui,/Sincronizando primeira página IMAP/);
+assert.match(ui,/Promise\.allSettled\(targets\.map/);
+assert.match(backend,/sync_recent_async\(account_id, &folder_for_sync, 100\)/);
+assert.match(backend,/backfill_async\(account_id, &folder, 100\)/);
+assert.match(backend,/MAINTENANCE.*OnceLock/s);
+assert.match(backend,/Ok\(result\)/);
+assert.match(mail,/fn display_mailbox_name\(raw: &str\)/);
+assert.match(mail,/name: full\.clone\(\)/);
+assert.match(mail,/display_name,/);
+assert.match(css,/html\[data-theme="dark"\] \.selectShell/);
+assert.match(css,/html\[data-theme="system"\] \.selectShell/);
+console.log('PASS: RC5 provider-neutral first-page, maintenance dedup, raw IMAP keys, dark selectors');

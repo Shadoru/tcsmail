@@ -1,6 +1,6 @@
-> **TCS Mail 0.8.2-rc4** — candidato de homologação; não publicado.
+> **TCS Mail 0.8.2-rc5** — candidato de homologação; não publicado.
 > Fonte completa + GitHub Actions em `.github/workflows/tcsmail-homologacao.yml`.
-> Para instruções de atualização e build, consulte o `GUIA_RC4_UBUNTU_GITHUB.md` no pacote de entrega.
+> Para instruções de atualização e build, consulte o `GUIA_RC5_UBUNTU_GITHUB.md` no pacote de entrega.
 
 # TCS Mail 0.8.2-rc2 — candidata de validação
 

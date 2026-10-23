@@ -314,7 +314,10 @@ function navFolderTree(){
 }
 function folderChildren(parent){
  const visible=navFolderTree();
- return visible.filter(f=>(f.parent||'').toLowerCase()===(parent||'').toLowerCase())
+ // Provider SPECIAL-USE folders are already exposed as first-class shortcuts;
+ // do not duplicate [Gmail]/All Mail (\\All), Sent, Trash etc. in the tree.
+ const special=new Set(['sent','drafts','archive','junk','trash'].map(folderName).filter(Boolean).map(f=>f.toLowerCase()));
+ return visible.filter(f=>(f.parent||'').toLowerCase()===(parent||'').toLowerCase()&&!special.has(f.name.toLowerCase()))
 }
 function folderNodeHtml(node,depth=0){
  const kids=folderChildren(node.name),disabled=!node.selectable,active=state.view==='mail'&&state.folder===node.name,expanded=folderIsExpanded(node.name);
@@ -490,7 +493,9 @@ async function loadMessages(cursor=null,append=false,opts={}){
   if(append)state.items.push(...pageItems);else{state.items=pageItems;if(!opts.preserveSelection)state.selected.clear();if(!opts.preserveCurrent&&currentId&&!state.items.some(x=>x.id===currentId))state.current=null}
   state.page=page;if(state.focusId&&!state.items.some(x=>x.id===state.focusId))state.focusId=null;
   renderVirtualRows(false);if(vp&&opts.preserveScroll!==false)vp.scrollTop=Math.min(oldScroll,Math.max(0,state.items.length*rowHeight()-vp.clientHeight));
-  status(`${page.total} mensagem(ns)`);refreshUnreadCounts().catch(()=>{});
+  const initialSync = state.folderInitialSyncKey===`${state.account}\u0000${state.folder}`;
+  status(initialSync && !page.total ? 'Sincronizando primeira página IMAP…' : `${page.total} mensagem(ns)`);
+  refreshUnreadCounts().catch(()=>{});
  }catch(e){if(requestSeq===state.listRequestSeq)showError(e)}finally{if(append)state.pagingInFlight=false}
 }
 function rowHeight(){return state.density==='compact'?66:state.density==='spacious'?108:88}
@@ -770,16 +775,19 @@ async function syncFolderHistory(target,{manual=false,scope=null}={}){
  const work=(async()=>{
   let added=0,older=0,complete=false;
   const active=()=>!scope|| (state.view==='mail'&&state.folder===scope.folder&&state.account===scope.account);
-  const recentLimit=manual?90:50,historyLimit=manual?60:20;
+  // RC5: one foreground-sized sync page on entry; the rest is explicit/retomável.
+  // Applies to Gmail, Microsoft Exchange Online and all standard IMAP providers.
+  const recentLimit=manual?10:1,historyLimit=manual?10:0;
   // catch up from an old incremental checkpoint even for a busy Sent mailbox
   for(let n=0;n<recentLimit&&active();n++){
    const r=await invoke('sync_recent',target);added+=Number(r?.fetched||0);
    if(active()&&r?.fetched){await loadMessages(null,false,{preserveScroll:true,preserveCurrent:true,preserveSelection:true})}
-   if(Number(r?.fetched||0)<300)break;
-   if(n===recentLimit-1)toast('Sincronização recente parcial: abra a pasta novamente para continuar.');
+   if(Number(r?.fetched||0)<100)break;
+   if(manual&&n===recentLimit-1)toast('Sincronização recente parcial: execute sincronizar para continuar.');
   }
-  // Fetch older pages without treating first 300 newest messages as complete.
-  for(let n=0;n<historyLimit&&active();n++){
+  // RC5: automatic entry must not start a 500-message historical FETCH.
+  // Backfill is a manual action; its guarded checkpoints remain unchanged.
+  for(let n=0;manual&&n<historyLimit&&active();n++){
    const r=await invoke('sync_backfill',target);
    older+=Number(r?.fetched||0);complete=!!r?.backfill_complete;
    if(active()&&r?.fetched){await loadMessages(null,false,{preserveScroll:true,preserveCurrent:true,preserveSelection:true})}
@@ -846,19 +854,43 @@ async function syncTargetsForFolder(folder){
 }
 async function enterFolder(folder){
  state.view='mail';state.folder=folder;state.selected.clear();state.focusId=null;state.selectionAnchor=null;
- renderShell();await loadMessages(null,false,{preserveScroll:false,preserveCurrent:false});
  const scope={folder,account:state.account};
+ const key=`${scope.account}\u0000${scope.folder}`;
+ state.folderInitialSyncKey=key;
+ const started=performance.now();
+ // Preserve the tree's scroll position when a folder is selected; it is not
+ // an instruction to reset the navigation to the top or to collapse parents.
+ const sidebarBefore=document.querySelector('.sidebar');
+ const folderBefore=document.querySelector('.columnsFolderPane');
+ const sidebarScroll=sidebarBefore?.scrollTop??null;
+ const folderScroll=folderBefore?.scrollTop??null;
+ renderShell();
+ if(sidebarScroll!==null&&document.querySelector('.sidebar'))document.querySelector('.sidebar').scrollTop=sidebarScroll;
+ if(folderScroll!==null&&document.querySelector('.columnsFolderPane'))document.querySelector('.columnsFolderPane').scrollTop=folderScroll;
+ await loadMessages(null,false,{preserveScroll:false,preserveCurrent:false});
  try{
   const targets=await syncTargetsForFolder(folder);
   if(state.view!=='mail'||state.folder!==folder||state.account!==scope.account)return;
-  // Fetch new mail and historical pages while this folder is in use, without
-  // starting background system services or blocking the UI render.
+  // Responsive-first: do not block navigation for other folders or stale views.
+  // A bounded initial fetch handles Gmail, Microsoft and ordinary IMAP alike.
   Promise.allSettled(targets.map(t=>syncFolderHistory(t,{scope}))).then(results=>{
    if(state.view!=='mail'||state.folder!==folder||state.account!==scope.account)return;
    for(const failure of results.filter(r=>r.status==='rejected'))
     toast(`Falha na sincronização IMAP: ${String(failure.reason)}`);
+   // Keep diagnostics categorical: no addresses, folder names or message data.
+   console.info('TCS mail first sync elapsed (ms):',Math.round(performance.now()-started));
+  }).finally(()=>{
+   if(state.folderInitialSyncKey!==key)return;
+   state.folderInitialSyncKey=null;
+   if(state.view==='mail'&&state.folder===folder&&state.account===scope.account){
+    if(!state.items.length)status('Nenhuma mensagem local nesta visualização · use Atualizar para continuar a consulta IMAP');
+    else status(`${state.page?.total??state.items.length} mensagem(ns)`);
+   }
   });
- }catch(e){toast('Não foi possível identificar a pasta IMAP: '+String(e))}
+ }catch(e){
+  if(state.folderInitialSyncKey===key)state.folderInitialSyncKey=null;
+  toast('Não foi possível identificar a pasta IMAP: '+String(e));
+ }
 }
 function selectRange(id,{additive=false}={}){const anchor=state.selectionAnchor??state.focusId??id;const a=state.items.findIndex(x=>x.id===anchor),b=state.items.findIndex(x=>x.id===id);if(!additive)state.selected.clear();if(a<0||b<0){state.selected.add(id)}else{for(let i=Math.min(a,b);i<=Math.max(a,b);i++){state.selected.add(state.items[i].id)}}state.focusId=id;renderVirtualRows()}
 function toggleSelection(id){if(state.selected.has(id))state.selected.delete(id);else state.selected.add(id);state.focusId=id;state.selectionAnchor=id;renderVirtualRows()}
