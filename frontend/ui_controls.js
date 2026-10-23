@@ -19,8 +19,18 @@ function enhanceSelect(select){
    popup.innerHTML=enabledOptions().map((o,i)=>`<button type="button" role="option" aria-selected="${o.selected}" data-select-i="${i}" class="${o.selected?'active':''}">${escHtml(o.textContent)}</button>`).join('');
    active=Math.max(0,enabledOptions().findIndex(o=>o.selected));
  };
- const close=()=>{popup.classList.add('hidden');button.setAttribute('aria-expanded','false')};
- const open=()=>{refresh();popup.classList.remove('hidden');button.setAttribute('aria-expanded','true');popup.querySelector(`[data-select-i="${active}"]`)?.scrollIntoView({block:'nearest'})};
+ const place=()=>{
+   if(!shell.isConnected){close();return;}
+   const rect=button.getBoundingClientRect(),gap=5;
+   const width=Math.min(Math.max(rect.width,200),Math.max(160,innerWidth-16));
+   const availableDown=Math.max(0,innerHeight-rect.bottom-gap-8),availableUp=Math.max(0,rect.top-gap-8);
+   const above=availableDown<Math.min(240,availableUp) && availableUp>availableDown;
+   const maxHeight=Math.min(360,Math.max(90,above?availableUp:availableDown));
+   Object.assign(popup.style,{left:`${Math.max(8,Math.min(rect.left,innerWidth-width-8))}px`,width:`${width}px`,maxHeight:`${maxHeight}px`,top:above?'auto':`${rect.bottom+gap}px`,bottom:above?`${innerHeight-rect.top+gap}px`:'auto'});
+ };
+ const onScroll=()=>{if(!shell.isConnected)close();else place()};
+ const close=()=>{popup.classList.add('hidden');popup.classList.remove('tcsFloatingPopup');button.setAttribute('aria-expanded','false');window.removeEventListener('resize',onScroll);window.removeEventListener('scroll',onScroll,true);if(shell.isConnected)shell.append(popup);else popup.remove()};
+ const open=()=>{refresh();document.body.append(popup);popup.classList.add('tcsFloatingPopup');popup.classList.remove('hidden');button.setAttribute('aria-expanded','true');place();window.addEventListener('resize',onScroll);window.addEventListener('scroll',onScroll,true);popup.querySelector(`[data-select-i="${active}"]`)?.scrollIntoView({block:'nearest'})};
  const choose=i=>{const opts=enabledOptions(),opt=opts[i];if(!opt)return;select.value=opt.value;select.dispatchEvent(new Event('change',{bubbles:true}));refresh();close();button.focus()};
  button.onclick=()=>popup.classList.contains('hidden')?open():close();
  button.onkeydown=e=>{
@@ -34,7 +44,7 @@ function enhanceSelect(select){
  popup.onclick=e=>{const item=e.target.closest('[data-select-i]');if(!item)return;e.preventDefault();e.stopPropagation();choose(Number(item.dataset.selectI))};
  select.addEventListener('change',refresh);
  select.addEventListener('tcs-select-refresh',refresh);
- document.addEventListener('pointerdown',e=>{if(!shell.contains(e.target))close()});
+ document.addEventListener('pointerdown',e=>{if(!shell.contains(e.target)&&!popup.contains(e.target))close()});
  refresh()
 }
 

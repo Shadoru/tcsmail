@@ -1075,7 +1075,7 @@ GUIDES["pt-BR"].push(...[
   [
    "Abra Configurações",
    "Entre em Sobre",
-   "Confira se aparece 0.8.2-rc5 e o site oficial",
+   "Confira se aparece 0.8.2-rc6 e o site oficial",
    "Se for outra versão, não apague as contas: confira o instalador"
   ],
   "A versão do aplicativo é diferente do número do pacote de origem."
@@ -2406,7 +2406,7 @@ GUIDES["pt-BR"].push(...[
   "Como verificar se estou na versão nova no TCS Mail.",
   [
    "Abra Sobre no TCS Mail",
-   "Confira 0.8.2-rc5",
+   "Confira 0.8.2-rc6",
    "No Linux, verifique o executável via command -v tcs-mail",
    "Não desinstale outra versão sem identificar seus caminhos"
   ],
@@ -2469,7 +2469,7 @@ GUIDES["en-US"].push(...[
   [
    "Open Settings",
    "Choose About",
-   "Check for version 0.8.2-rc5 and the official website",
+   "Check for version 0.8.2-rc6 and the official website",
    "If it differs, inspect the installer without deleting accounts"
   ],
   "The app version can differ from the source archive label."
@@ -3800,7 +3800,7 @@ GUIDES["en-US"].push(...[
   "How to verify the newly installed app in TCS Mail.",
   [
    "Open About in TCS Mail",
-   "Check 0.8.2-rc5",
+   "Check 0.8.2-rc6",
    "On Linux, locate the executable with command -v tcs-mail",
    "Do not uninstall unknown versions by guessing paths"
   ],
@@ -3873,6 +3873,41 @@ export function searchGuides(locale,query,category=''){
   return score(b)-score(a);
  });
 }
+// RC6: bilingual interactive move/delete guidance, available offline and searchable.
+const RC6_MOVEMENT_GUIDES = {
+ 'pt-BR': [
+  ['Mensagens','Mover mensagens entre pastas','Arraste uma ou várias mensagens para outra pasta da mesma conta.',
+   ['Selecione uma ou várias mensagens da mesma conta usando Ctrl/Command ou Shift.',
+    'Arraste uma mensagem selecionada para uma pasta visível na lateral; confirme o destino.',
+    'Alternativamente, clique com o botão direito na mensagem e escolha Mover…; escolha a pasta pelo nome legível e clique em Mover.',
+    'Apenas pastas selecionáveis aceitam mensagens. Em contas diferentes, mova separadamente.',
+    'Se uma movimentação falhar, verifique a mensagem de erro e repita somente o que restou.'],
+   'Os identificadores das pastas IMAP nunca são alterados pela tradução; somente o nome exibido muda.'],
+  ['Mensagens','Localizar Excluir no menu de contexto','Use a ação Excluir que agora aparece entre as primeiras opções.',
+   ['Clique com o botão direito em uma mensagem ou numa seleção.',
+    'Clique em Excluir, perto do topo do menu, para enviar à Lixeira.',
+    'Na Lixeira, Excluir definitivamente exige confirmação e não pode ser desfeito.',
+    'Use a rolagem do menu ou as setas do teclado para encontrar as demais ações.'],
+   'Arrastar mensagens não as exclui; mover para Lixeira é uma operação de pasta que deve ser confirmada.']
+ ],
+ 'en-US': [
+  ['Messages','Move messages between folders','Drag one or more messages to another folder of the same account.',
+   ['Select messages from the same account using Ctrl/Command or Shift.',
+    'Drag a selected message to a visible folder in the sidebar, then confirm.',
+    'Alternatively right-click a message and choose Move…; select the readable folder name and click Move.',
+    'Only selectable folders accept messages; move messages from different accounts separately.',
+    'If some messages fail to move, read the error and retry only the remaining ones.'],
+   'IMAP mailbox identifiers are never translated: only their display labels are decoded.'],
+  ['Messages','Find Delete in the context menu','Delete is now close to the top of the message actions menu.',
+   ['Right-click a message or multiple selected messages.',
+    'Choose Delete near the top to move messages to Trash.',
+    'In Trash, permanently deleting messages requires confirmation and cannot be undone.',
+    'Scroll the menu or use arrow keys to access the additional actions.'],
+   'Dragging messages does not delete them. Moving to Trash is a folder operation requiring confirmation.']
+ ]
+};
+for (const lang of ['pt-BR','en-US']) GUIDES[lang].push(...RC6_MOVEMENT_GUIDES[lang]);
+
 export function renderHelpCenter(panel,{onFeedback=()=>{}}={}){
  const en=getLocale()==='en-US',locale=en?'en-US':'pt-BR';
  const txt=en?{title:'TCS Mail Help',intro:'Practical instructions you can follow. Search a task or choose a topic.',search:'Search: e.g. drafts, sync, accounts…',all:'All topics',clear:'Clear',count:'guides',more:'Show more guides',shown:'shown',empty:'No guide found. Try a different word or clear filters.',steps:'Step by step',note:'Important',feedback:'Report a problem',back:'Back to articles'}:{title:'Ajuda do TCS Mail',intro:'Instruções práticas, do primeiro clique à conclusão. Pesquise uma tarefa ou escolha um assunto.',search:'Pesquisar: rascunhos, sincronizar, contas…',all:'Todos os assuntos',clear:'Limpar',count:'guias',more:'Mostrar mais guias',shown:'exibidos',empty:'Nenhum guia encontrado. Pesquise outro termo ou limpe os filtros.',steps:'Passo a passo',note:'Atenção',feedback:'Informar um problema',back:'Voltar aos artigos'};

@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "TCS Mail",
-  "version": "0.8.2-rc5",
+  "version": "0.8.2-rc6",
   "identifier": "com.thecreativesolver.TCSMail",
   "build": {
     "frontendDist": "../frontend"
@@ -46,7 +46,7 @@
         "installerIcon": "icons/icon.ico"
       },
       "wix": {
-        "version": "0.8.205"
+        "version": "0.8.206"
       }
     },
     "useLocalToolsDir": true,

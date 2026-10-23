@@ -873,3 +873,16 @@ html[data-theme="dark"] .composeToolbar .selectButton,
 html[data-theme="dark"] .sendOptionsPopover .selectButton{background:#242a30!important;color:#eef1f4!important}
 .composerNative, .composeContent, .composeEditor, .composeToolbar{min-width:0;max-width:100%}
 .composeToolbar{row-gap:6px}
+
+/* RC6 — floating select menus are never clipped by modal or sidebar scroll areas. */
+.selectPopup.tcsFloatingPopup{position:fixed!important;z-index:10010!important;min-width:0!important;max-width:calc(100vw - 16px)!important;overflow:auto!important;overscroll-behavior:contain;background:var(--surface-strong)!important;color:var(--text)!important;color-scheme:inherit}
+.selectPopup.tcsFloatingPopup button{background:transparent!important;color:var(--text)!important;text-align:left!important}
+.selectPopup.tcsFloatingPopup button.active,.selectPopup.tcsFloatingPopup button.keyboardActive,.selectPopup.tcsFloatingPopup button:hover{background:color-mix(in srgb,var(--accent) 22%,var(--surface-strong))!important;color:var(--text)!important}
+.moveDestinationField,.moveDestinationField .selectShell{width:100%;min-width:0}
+.moveDestinationField>small{display:block;color:var(--muted);margin-top:8px;line-height:1.4;overflow-wrap:anywhere}
+.contextMenu{max-height:min(70vh,560px);overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
+.contextMenu .dangerAction{color:var(--danger);font-weight:700}
+.contextMenu [data-cm]:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.navItem.mailDropTarget{outline:2px dashed var(--accent)!important;outline-offset:-2px;background:color-mix(in srgb,var(--accent) 24%,var(--surface))!important}
+.mailList .row[draggable="true"]{cursor:grab}
+.mailList .row[draggable="true"]:active{cursor:grabbing}

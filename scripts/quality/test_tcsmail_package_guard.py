@@ -43,7 +43,7 @@ class MacBundlePreparationTests(unittest.TestCase):
                 app = bundles / 'macos' / 'TCS Mail.app'
                 (app / 'Contents' / 'MacOS').mkdir(parents=True)
                 (app / 'Contents' / 'MacOS' / 'tcs-mail').write_bytes(b'synthetic executable')
-                dmg = bundles / 'dmg' / 'TCS Mail_0.8.2-rc5.dmg'
+                dmg = bundles / 'dmg' / 'TCS Mail_0.8.2-rc6.dmg'
                 dmg.parent.mkdir(parents=True)
                 dmg.write_bytes(b'synthetic dmg')
                 invocations = []
@@ -66,7 +66,7 @@ class MacBundlePreparationTests(unittest.TestCase):
 
                 self.assertEqual(len(invocations), 1)
                 result = root / 'delivery' / label
-                package = result / f'tcsmail-0.8.2-rc5-{label}.zip'
+                package = result / f'tcsmail-0.8.2-rc6-{label}.zip'
                 self.assertTrue(package.is_file())
                 with zipfile.ZipFile(package) as z:
                     self.assertEqual(set(z.namelist()), {'TCS Mail.app.zip', dmg.name})
@@ -74,7 +74,7 @@ class MacBundlePreparationTests(unittest.TestCase):
                         self.assertIn('TCS Mail.app/Contents/MacOS/tcs-mail', app_archive.namelist())
                 info = json.loads((result / 'build-info.json').read_text(encoding="utf-8"))
                 self.assertEqual(info['github_sha'], args.sha)
-                self.assertEqual(info['version'], '0.8.2-rc5')
+                self.assertEqual(info['version'], '0.8.2-rc6')
                 self.assertEqual({f['kind'] for f in info['files']}, {'app', 'dmg'})
                 digest = hashlib.sha256(package.read_bytes()).hexdigest()
                 self.assertEqual(info['zip_sha256'], digest)

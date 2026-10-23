@@ -42,6 +42,7 @@ export function setLanguagePreference(pref){
 }
 
 const EN={
+ 'Mover':'Move','Cancelar':'Cancel','Destino':'Destination','Pasta de destino':'Destination folder','Excluir':'Delete','Excluir definitivamente':'Delete permanently','Ações de mensagem':'Message actions','Mover mensagem':'Move message','Selecione mensagens do servidor para mover.':'Select server messages to move.','Só é possível mover mensagens da mesma conta.':'Messages must belong to the same account.','A pasta de destino não está disponível.':'Destination folder is not available.','As mensagens já estão nesta pasta.':'Messages are already in this folder.','Outra movimentação está em andamento.':'Another move is in progress.','Nenhuma pasta de destino disponível.':'No destination folders available.','Selecione mensagens do servidor da mesma conta.':'Select server messages from the same account.','Arraste para uma pasta da mesma conta':'Drag to a folder in the same account','Escolha a pasta. Os nomes são exibidos com acentos; o identificador IMAP original será preservado.':'Choose a folder. Accents are shown correctly; the original IMAP identifier is preserved.',
  'Aplicativo':'Application','Geral':'General','Aparência':'Appearance','Contas':'Accounts','Correio':'Mail','Leitura':'Reading','Composição':'Composition','Pastas e sincronização':'Folders & sync','Privacidade e segurança':'Privacy & security','Organização':'Organization','Calendário':'Calendar','Contatos e fontes':'Contacts & sources','Preferências':'Preferences','Notificações':'Notifications','IA e RAG':'AI & RAG','Atalhos':'Shortcuts','Dados e suporte':'Data & support','Importar / Exportar':'Import / Export','Diagnóstico e avançado':'Diagnostics & advanced','Sobre':'About','Ajuda':'Help',
  'Editor':'Editor','Assinaturas':'Signatures','Templates':'Templates','Pastas':'Folders','Sincronização':'Synchronization','Privacidade':'Privacy','Diagnóstico':'Diagnostics','Avançado':'Advanced',
  'Idioma do aplicativo':'App language','Sistema (recomendado)':'System (recommended)','Português (Brasil)':'Portuguese (Brazil)','English (United States)':'English (United States)','O TCS Mail usa o idioma do sistema por padrão. A alteração reinicia apenas a interface e não afeta mensagens ou contas.':'TCS Mail uses the system language by default. Changing it reloads only the interface and does not affect messages or accounts.','Idioma atualizado. Reiniciando a interface…':'Language updated. Reloading the interface…',
@@ -127,6 +128,11 @@ Object.assign(EN,{
 });
 
 const PATTERNS=[
+ [/^Mover (\d+) mensagem\(ns\) para (.+)\?$/i,(_,n,folder)=>`Move ${n} message(s) to ${folder}?`],
+ [/^(\d+) mensagem\(ns\) movida\(s\)\.$/i,(_,n)=>`${n} message(s) moved.`],
+ [/^(\d+) de (\d+) mensagem\(ns\) movida\(s\)\. As demais foram preservadas\.$/i,(_,ok,total)=>`${ok} of ${total} message(s) moved. The others were preserved.`],
+ [/^Mover (\d+) mensagem\(ns\) para a Lixeira\?$/i,(_,n)=>`Move ${n} message(s) to Trash?`],
+ [/^Excluir definitivamente (\d+) mensagem\(ns\)\? Esta ação não pode ser desfeita\.$/i,(_,n)=>`Permanently delete ${n} message(s)? This cannot be undone.`],
  [/^(\d+) mensagem\(ns\)$/i,(_,n)=>`${n} message(s)`],
  [/^(\d+) mensagem\(ns\) \.eml importada\(s\)\.$/i,(_,n)=>`${n} .eml message(s) imported.`],
  [/^(\d+) mensagem\(ns\) exportada\(s\)\.$/i,(_,n)=>`${n} message(s) exported.`],

@@ -12,10 +12,13 @@ import {draftSeed,draftRow,localDraftsForScope,filterLocalDrafts,mergeDraftRows}
 import {WorkspaceModel} from './workspace.js';
 import {NAV_MODES,normalizeNavMode,safeJson,normalizeGroups,normalizeFolderRefs,folderRefKey,isHidden,isFavorite,toggleFolderRef,groupAccountIds,visibleFolders} from './nav_modes.js';
 import {installControlEnhancer} from './ui_controls.js';
+import {moveFolderChoices,validateMoveSelection} from './folder_move.js';
 import {initI18n,installI18nObserver,tr,getLocale} from './i18n.js';
 
 const app=$('#app');
 const state={boot:null,account:null,folder:'INBOX',roles:{},folders:[],folderTree:[],page:null,items:[],selected:new Set(),current:null,search:'',readFilter:'all',quickFilter:'all',sortBy:localStorage.getItem('tcs.h01.sort')||'date',sortDir:localStorage.getItem('tcs.h01.dir')||'desc',threaded:localStorage.getItem('tcs.h01.threads')==='1',collapsedThreads:new Set(),view:'mail',compact:false,theme:'system',density:'comfortable',rowHeight:88,listWidth:390,focusId:null,selectionAnchor:null,localDrafts:[],readTimer:null,openRequestSeq:0,listRequestSeq:0,navigationMode:'tree',unifiedAccounts:new Set(),navigationGroups:[],activeGroupId:null,groupAccountIds:new Set(),folderFavorites:[],hiddenFolders:[],subscribedOnly:false,folderExpansion:{},savedSearches:[],navigationTab:'accounts',navAccountWidth:150,columnsFolderCollapsed:false,unreadCounts:{},workspace:new WorkspaceModel()};
+let activeMailDrag=null;
+let moveInProgress=false;
 const ctx={state,openSettings:(k)=>openSettings(ctx,k),setCompact,setTheme,setDensity,setNavigationMode,openComposer:(seed)=>openComposer(ctx,seed),goView:(v)=>goView(v),goMail:(f)=>goMail(f),workspaceRegister,workspaceUpdate,workspaceMinimize,workspaceRestore,workspaceRemove,refreshLocalDrafts,persistNavigationState,openFolderOrganizer,openNavigationGroupsManager};
 // Determine the destination at click time instead of relying on a stale UI cache.
 // An explicit detach request always wins; errors preserve existing drafts.
@@ -414,6 +417,7 @@ function wireShell(){
  if($('#newMail'))$('#newMail').oncontextmenu=e=>{e.preventDefault();openNewMenu()};
 
  $$('[data-folder]').forEach(b=>b.onclick=()=>enterFolder(b.dataset.folder));
+ bindMailFolderDropTargets();
  $$('[data-folder-toggle]').forEach(b=>b.onclick=e=>{e.preventDefault();e.stopPropagation();toggleFolderExpansion(b.dataset.folderToggle)});
  $$('[data-folder-context]').forEach(b=>b.oncontextmenu=e=>{e.preventDefault();e.stopPropagation();openFolderContextMenu(e.clientX,e.clientY,state.account,b.dataset.folderContext)});
  $$('[data-unified-folder]').forEach(b=>b.onclick=()=>{state.account=null;state.activeGroupId=null;state.groupAccountIds.clear();enterFolder(b.dataset.unifiedFolder)});
@@ -510,7 +514,7 @@ function messageRowHtml(m,h){
  const local=!!m.local_draft;
  const isSentRow=!local&&(state.folder==='__SENT'||(state.account===m.account_id&&m.folder===folderName('sent')));
  const senderLabel=(isSentRow||state.sortBy==='recipient')?`Para: ${m.to_text||'(destinatário não informado)'}`:(m.from_name||m.from_email);
- return `<article class="row ${local?'localDraftRow':''} ${m.unread?'unread':''} ${state.selected.has(m.id)?'selected':''} ${state.focusId===m.id?'focused':''} ${state.current?.id===m.id?'current':''}" style="height:${h}px" data-id="${m.id}" role="option" aria-selected="${state.selected.has(m.id)}" tabindex="-1">
+ return `<article class="row ${local?'localDraftRow':''} ${m.unread?'unread':''} ${state.selected.has(m.id)?'selected':''} ${state.focusId===m.id?'focused':''} ${state.current?.id===m.id?'current':''}" style="height:${h}px" data-id="${m.id}" role="option" aria-selected="${state.selected.has(m.id)}" tabindex="-1" draggable="${!local}" title="${local?'Rascunho local':'Arraste para uma pasta da mesma conta'}">
  <input class="rowCheck" type="checkbox" data-check="${m.id}" ${state.selected.has(m.id)?'checked':''} aria-label="Selecionar ${local?'rascunho':'mensagem'}">
  <div class="rowText"><div class="rowTop"><span class="sender" title="${esc(senderLabel)}">${esc(local?(state.sortBy==='recipient'?`Para: ${m.to_text||'(destinatário não informado)'}`:'Rascunho'):senderLabel)}</span><time>${fmtDate(m.date_ts)}</time></div>
  <div class="subject" title="${esc(m.subject||'(sem assunto)')}">${m.priority?'<span class="priorityMark">!</span> ':''}${esc(m.subject||'(sem assunto)')}${groupCount>1?` <button type="button" class="h01ThreadCount" data-thread="${esc(threadRoot(m))}" title="Expandir/recolher conversação carregada" aria-label="Expandir ou recolher conversação">${groupCount} ${state.collapsedThreads.has(threadRoot(m))?'▸':'▾'}</button>`:''}${state.folder==='__SMART'?` <span class="smartBadge">${esc(smartCategory(m))}</span>`:''}</div>
@@ -533,6 +537,8 @@ function renderVirtualRows(reset=false){
  $$('.row',rows).forEach(r=>{
   const id=Number(r.dataset.id);
   const item=state.items.find(x=>x.id===id);
+  r.ondragstart=e=>beginMailDrag(e,item);
+  r.ondragend=clearMailDrag;
   r.onmousedown=e=>{if(e.button===0&&!e.target.closest('input,button'))$('#rowsViewport')?.focus({preventScroll:true})};r.onclick=e=>{const toggle=e.target.closest('[data-thread]');if(toggle){e.stopPropagation();const key=toggle.dataset.thread;if(state.collapsedThreads.has(key))state.collapsedThreads.delete(key);else state.collapsedThreads.add(key);renderVirtualRows();return}item?.local_draft?handleLocalDraftClick(e,item):handleRowClick(e,id)};
   r.ondblclick=e=>{e.preventDefault();e.stopPropagation();if(item?.local_draft)return openLocalDraft(item.local_draft_id);return localStorage.getItem('tcs.doubleClickBehavior')==='preview'?openMessage(id):openMessageFocused(id)};
   r.oncontextmenu=e=>{e.preventDefault();if(item?.local_draft){if(!state.selected.has(item.id)){state.selected.clear();state.selected.add(item.id);state.focusId=item.id;renderVirtualRows()}openLocalDraftContextMenu(e.clientX,e.clientY,item);return}if(!state.selected.has(id)){state.selected.clear();state.selected.add(id);state.focusId=id;state.selectionAnchor=id;renderVirtualRows()}openMessageContextMenu(e.clientX,e.clientY,id)};
@@ -756,8 +762,88 @@ async function reply(m,all){const c=await invoke('reply_context',{id:m.id,replyA
 async function toggleFlag(m,key){await invoke('set_flags',{req:{id:m.id,starred:key==='starred'?!m.starred:null,pinned:key==='pinned'?!m.pinned:null,priority:key==='priority'?!m.priority:null,unread:null}});await loadMessages();await openMessage(m.id)}
 async function act(id,action,target=null){const fallback=state.current?.id===id?(adjacentRegularMessage(id,1)||adjacentRegularMessage(id,-1)):null;try{await invoke('message_action',{req:{id,action,target}});state.current=null;state.selected.delete(id);await loadMessages(null,false,{preserveScroll:true,preserveCurrent:false});if(fallback&&state.items.some(x=>x.id===fallback.id))await openMessage(fallback.id)}catch(e){showError(e)}}
 async function deleteOne(m){const permanent=state.folder===folderName('trash');if(permanent&&!await confirmDialog('Excluir definitivamente? Esta ação não pode ser desfeita.',{danger:true,confirmLabel:'Excluir definitivamente'}))return;act(m.id,permanent?'delete_permanent':'delete')}
-async function moveDialog(m){const folders=state.account===m.account_id&&state.folders.length?state.folders:await invoke('list_folders',{accountId:m.account_id});const {root,close}=modal('Mover mensagem',`<label class="field"><span>Destino</span><select id="moveTarget">${folders.map(f=>`<option>${esc(f)}</option>`).join('')}</select></label><footer class="modalActions"><button id="doMove" class="primary">Mover</button></footer>`);$('#doMove',root).onclick=async()=>{await act(m.id,'move',$('#moveTarget',root).value);close()}}
-async function moveManyDialog(ids){const rows=ids.map(id=>state.items.find(x=>x.id===id)).filter(Boolean);const accounts=[...new Set(rows.map(x=>x.account_id))];if(accounts.length!==1)return toast('Para mover várias mensagens de uma vez, selecione mensagens da mesma conta.');const accountId=accounts[0];const folders=state.account===accountId&&state.folders.length?state.folders:await invoke('list_folders',{accountId});const {root,close}=modal(`Mover ${ids.length} mensagem(ns)`,`<label class="field"><span>Destino</span><select id="moveTargetMany">${folders.map(f=>`<option>${esc(f)}</option>`).join('')}</select></label><footer class="modalActions"><button id="doMoveMany" class="primary">Mover</button></footer>`);$('#doMoveMany',root).onclick=async()=>{const target=$('#moveTargetMany',root).value;for(const id of ids)await invoke('message_action',{req:{id,action:'move',target}});close();state.selected.clear();state.current=null;await loadMessages(null,false,{preserveScroll:true})}}
+// The folder tree supplies readable labels, while `value` is the untouched remote IMAP identifier.
+async function resolveMoveDestinations(accountId){
+  let tree=(state.account===accountId && state.folderTree.length)?state.folderTree:[];
+  if(!tree.length)tree=await invoke('list_folder_tree',{accountId});
+  return moveFolderChoices(tree);
+}
+async function moveMessagesToFolder(ids,target,choices,{ask=false}={}){
+  if(moveInProgress){toast('Outra movimentação está em andamento.');return false;}
+  const rows=[...new Set(ids.map(Number))].map(id=>state.items.find(x=>Number(x.id)===id));
+  if(rows.some(x=>!x)){toast('A seleção foi alterada. Selecione novamente as mensagens.');return false;}
+  const error=validateMoveSelection(rows,target,choices,{sourceFolder:state.folder});
+  if(error){toast(error);return false;}
+  if(ask && !await confirmDialog(`Mover ${rows.length} mensagem(ns) para ${choices.find(f=>f.value===target)?.label||'a pasta'}?`))return false;
+  moveInProgress=true;
+  let done=0;
+  try {
+    for(const row of rows){
+      try {await invoke('message_action',{req:{id:row.id,action:'move',target}});done++;}
+      catch(error){showError(`Falha ao mover mensagem: ${error}`);break;}
+    }
+    if(done){
+      for(const row of rows.slice(0,done))state.selected.delete(row.id);
+      if(rows.slice(0,done).some(row=>row.id===state.current?.id))state.current=null;
+      await loadMessages(null,false,{preserveScroll:true,preserveCurrent:false,preserveSelection:true});
+      refreshUnreadCounts().catch(()=>{});
+    }
+    toast(done===rows.length?`${done} mensagem(ns) movida(s).`:`${done} de ${rows.length} mensagem(ns) movida(s). As demais foram preservadas.`);
+    return done===rows.length;
+  } finally {moveInProgress=false;}
+}
+async function showMoveDialog(ids){
+ const rows=ids.map(id=>state.items.find(x=>Number(x.id)===Number(id))).filter(Boolean);
+ const accountId=rows[0]?.account_id;
+ if(!accountId || new Set(rows.map(x=>x.account_id)).size!==1 || rows.some(x=>x.local_draft))return toast('Selecione mensagens do servidor da mesma conta.');
+ let choices;
+ try{choices=await resolveMoveDestinations(accountId)}catch(e){showError(`Não foi possível obter as pastas de destino: ${e}`);return;}
+ if(!choices.length)return toast('Nenhuma pasta de destino disponível.');
+ const options=choices.map(f=>`<option value="${esc(f.value)}">${esc(f.label)}</option>`).join('');
+ const {root,close}=modal(`Mover ${ids.length} mensagem(ns)`,`<label class="field moveDestinationField"><span>Destino</span><select id="moveTarget" aria-label="Pasta de destino">${options}</select><small>Escolha a pasta. Os nomes são exibidos com acentos; o identificador IMAP original será preservado.</small></label><footer class="modalActions"><button type="button" id="cancelMove">Cancelar</button><button type="button" id="doMove" class="primary">Mover</button></footer>`);
+ $('#cancelMove',root).onclick=close;
+ $('#doMove',root).onclick=async e=>{const button=e.currentTarget;button.disabled=true;try{if(await moveMessagesToFolder(ids,$('#moveTarget',root).value,choices))close();}finally{button.disabled=false;}};
+}
+async function moveDialog(m){return showMoveDialog([m.id]);}
+async function moveManyDialog(ids){return showMoveDialog(ids);}
+function clearMailDrag(){activeMailDrag=null;document.querySelectorAll('.mailDropTarget').forEach(n=>n.classList.remove('mailDropTarget'));}
+function beginMailDrag(event,item){
+  clearMailDrag();
+  if(!item || item.local_draft || event.target.closest?.('input,button')){event.preventDefault();return;}
+  const selected=state.selected.has(item.id)?[...state.selected]:[item.id];
+  const rows=selected.map(id=>state.items.find(x=>x.id===id));
+  if(rows.some(m=>!m || m.local_draft || m.account_id!==item.account_id)){event.preventDefault();return;}
+  const token=`tcs-mail:${crypto.randomUUID()}`;
+  activeMailDrag={token,ids:selected.map(Number),accountId:item.account_id};
+  event.dataTransfer.effectAllowed='move';
+  // No subject, sender, credentials or message body leave the app in DataTransfer.
+  event.dataTransfer.setData('text/plain',token);
+}
+function bindMailFolderDropTargets(){
+ $$('[data-folder]').forEach(button=>{
+   const target=button.dataset.folder;
+   const eligible=()=>activeMailDrag && !moveInProgress && state.account===activeMailDrag.accountId &&
+     !button.disabled && (target==='INBOX' || state.folderTree.some(f=>f.name===target && f.selectable!==false));
+   button.addEventListener('dragover',event=>{
+     if(!eligible())return;
+     event.preventDefault();event.dataTransfer.dropEffect='move';button.classList.add('mailDropTarget');
+   });
+   button.addEventListener('dragleave',event=>{if(!button.contains(event.relatedTarget))button.classList.remove('mailDropTarget');});
+   button.addEventListener('drop',async event=>{
+     if(!eligible())return;
+     event.preventDefault();event.stopPropagation();
+     const drag=activeMailDrag;
+     const token=event.dataTransfer.getData('text/plain');
+     clearMailDrag();
+     if(!drag || drag.token!==token){toast('Arraste mensagens somente dentro do TCS Mail.');return;}
+     // Current selection/account can change while a drag is underway.
+     if(state.account!==drag.accountId){toast('Destino de outra conta não permitido.');return;}
+     const choices=moveFolderChoices(state.folderTree);
+     await moveMessagesToFolder(drag.ids,target,choices,{ask:true});
+   });
+ });
+}
+
 function followUpDialog(m,quick=false){const defaultTs=Math.floor(Date.now()/1000)+(quick?8*3600:86400);const {root,close}=modal('Acompanhamento',`<p class="dim">Crie um lembrete local para esta conversa.</p><label class="field"><span>Lembrar em</span><input id="followMessageAt" type="datetime-local" value="${new Date(defaultTs*1000-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16)}"></label><label class="field"><span>Nota</span><input id="followMessageNote" placeholder="Acompanhar resposta"></label><footer class="modalActions"><button id="followMessageSave" class="primary">Salvar acompanhamento</button></footer>`);$('#followMessageSave',root).onclick=async()=>{const due=fromLocalInput($('#followMessageAt',root).value);if(!due)return;await invoke('add_message_follow_up',{messageId:m.id,dueTs:due,note:$('#followMessageNote',root).value});close();toast('Acompanhamento criado.')}}
 function snoozeDialog(m){const {root,close}=modal('Adiar mensagem',`<label class="field"><span>Voltar em</span><input id="snoozeAt" type="datetime-local"></label><footer class="modalActions"><button id="doSnooze" class="primary">Adiar</button></footer>`);const d=new Date(Date.now()+86400000);$('#snoozeAt',root).value=d.toISOString().slice(0,16);$('#doSnooze',root).onclick=async()=>{const ts=fromLocalInput($('#snoozeAt',root).value);await invoke('snooze',{req:{id:m.id,until_ts:ts}});close();toast('Mensagem adiada.');loadMessages()}}
 async function taskFromMessage(m){const due=Math.floor(Date.now()/1000)+86400;try{await invoke('create_task_from_message',{messageId:m.id,dueTs:due});toast('Tarefa criada a partir da mensagem.');state.view='tasks';renderShell()}catch(e){showError(e)}}
@@ -897,23 +983,24 @@ function toggleSelection(id){if(state.selected.has(id))state.selected.delete(id)
 function handleSelectionClick(id,e,{checkbox=false}={}){if(e.shiftKey){selectRange(id);return}if(e.ctrlKey||e.metaKey||checkbox){if(state.selected.has(id))state.selected.delete(id);else state.selected.add(id);state.focusId=id;state.selectionAnchor=id;renderVirtualRows();return}state.selected.clear();state.selected.add(id);state.focusId=id;state.selectionAnchor=id;renderVirtualRows()}
 function handleRowClick(e,id){if(e.shiftKey||e.ctrlKey||e.metaKey){handleSelectionClick(id,e);return}state.selected.clear();state.selected.add(id);state.focusId=id;state.selectionAnchor=id;renderVirtualRows();$('#rowsViewport')?.focus({preventScroll:true});openMessage(id)}
 function ensureRowVisible(ix){const vp=$('#rowsViewport');if(!vp)return;const top=ix*rowHeight(),bottom=top+rowHeight();if(top<vp.scrollTop)vp.scrollTop=top;else if(bottom>vp.scrollTop+vp.clientHeight)vp.scrollTop=bottom-vp.clientHeight}
-async function bulkDirect(ids,action){const currentId=state.current?.id||null;const fallback=currentId&&ids.includes(currentId)?(adjacentRegularMessage(currentId,1)||adjacentRegularMessage(currentId,-1)):null;for(const id of ids){try{await invoke('message_action',{req:{id,action,target:null}})}catch(e){showError(e);break}}state.selected.clear();state.current=null;await loadMessages(null,false,{preserveScroll:true,preserveCurrent:false});if(fallback&&state.items.some(x=>x.id===fallback.id))await openMessage(fallback.id)}
+async function bulkDirect(ids,action){if(['delete','delete_permanent'].includes(action)&&!await confirmDialog(action==='delete_permanent'?`Excluir definitivamente ${ids.length} mensagem(ns)? Esta ação não pode ser desfeita.`:`Mover ${ids.length} mensagem(ns) para a Lixeira?`,{danger:true,confirmLabel:action==='delete_permanent'?'Excluir definitivamente':'Excluir'}))return;const currentId=state.current?.id||null;const fallback=currentId&&ids.includes(currentId)?(adjacentRegularMessage(currentId,1)||adjacentRegularMessage(currentId,-1)):null;for(const id of ids){try{await invoke('message_action',{req:{id,action,target:null}})}catch(e){showError(e);break}}state.selected.clear();state.current=null;await loadMessages(null,false,{preserveScroll:true,preserveCurrent:false});if(fallback&&state.items.some(x=>x.id===fallback.id))await openMessage(fallback.id)}
 function maybeLoadMore(){const vp=$('#rowsViewport');if(!vp||!state.page?.next_cursor)return;if(vp.scrollTop+vp.clientHeight>=vp.scrollHeight-160)loadMessages(state.page.next_cursor,true,{preserveScroll:true,preserveCurrent:true,preserveSelection:true})}
 function openMessageContextMenu(x,y,id){
  removeContextMenu();
- const menu=document.createElement('div');menu.className='contextMenu';menu.style.left=`${Math.min(x,window.innerWidth-250)}px`;menu.style.top=`${Math.max(8,Math.min(y,window.innerHeight-560))}px`;
+ const menu=document.createElement('div');menu.className='contextMenu';menu.style.left=`${Math.max(8,Math.min(x,window.innerWidth-290))}px`;menu.style.top='8px';menu.style.maxHeight='min(70vh, 560px)';
  const m=state.items.find(item=>item.id===id);const ids=state.selected.size?[...state.selected]:[id];const single=ids.length===1;
  const actions=[
-  ['Abrir',()=>openMessage(id),true],['Abrir em visualização ampliada',()=>openMessageFocused(id),single],
+  ['Abrir',()=>openMessage(id),true],['Mover…',()=>moveManyDialog(ids),true],
+  [state.folder===folderName('trash')?'Excluir definitivamente':'Excluir',()=>bulkDirect(ids,state.folder===folderName('trash')?'delete_permanent':'delete'),true],
+  ['Abrir em visualização ampliada',()=>openMessageFocused(id),single],
   ['Responder',()=>openMessage(id).then(()=>state.current&&reply(state.current,false)),single],['Responder a todos',()=>openMessage(id).then(()=>state.current&&reply(state.current,true)),single],['Encaminhar',()=>openMessage(id).then(()=>state.current&&$('#forward')?.click()),single],
   ['Marcar como lida',()=>setBulkFlags(ids,{unread:false}),true],['Marcar como não lida',()=>setBulkFlags(ids,{unread:true}),true],
   [m?.starred?'Remover dos favoritos':'Favoritar',()=>setBulkFlags(ids,{starred:!m?.starred}),true],[m?.pinned?'Desafixar':'Fixar',()=>setBulkFlags(ids,{pinned:!m?.pinned}),true],[m?.priority?'Prioridade normal':'Marcar prioridade',()=>setBulkFlags(ids,{priority:!m?.priority}),true],
-  ['Arquivar',()=>bulkDirect(ids,'archive'),true],['Concluir',()=>bulkDirect(ids,'done'),true],['Mover…',()=>moveManyDialog(ids),true],['Marcar como spam',()=>bulkDirect(ids,'spam'),true],['Adiar…',()=>openMessage(id).then(()=>state.current&&snoozeDialog(state.current)),single],['Acompanhamento…',()=>openMessage(id).then(()=>state.current&&followUpDialog(state.current,false)),single],['Separar',()=>Promise.allSettled(ids.map(messageId=>invoke('set_aside',{req:{id:messageId,on:true}}))).then(()=>loadMessages(null,false,{preserveScroll:true})),true],
+  ['Arquivar',()=>bulkDirect(ids,'archive'),true],['Concluir',()=>bulkDirect(ids,'done'),true],['Marcar como spam',()=>bulkDirect(ids,'spam'),true],['Adiar…',()=>openMessage(id).then(()=>state.current&&snoozeDialog(state.current)),single],['Acompanhamento…',()=>openMessage(id).then(()=>state.current&&followUpDialog(state.current,false)),single],['Separar',()=>Promise.allSettled(ids.map(messageId=>invoke('set_aside',{req:{id:messageId,on:true}}))).then(()=>loadMessages(null,false,{preserveScroll:true})),true],
   ['Criar tarefa',()=>openMessage(id).then(()=>state.current&&taskFromMessage(state.current)),single],['Criar evento',()=>openMessage(id).then(()=>state.current&&eventFromMessage(state.current)),single],['Exportar .eml',()=>invoke('export_message_eml',{id}),single],
-  [state.folder===folderName('trash')?'Excluir definitivamente':'Excluir',()=>bulkDirect(ids,state.folder===folderName('trash')?'delete_permanent':'delete'),true]
  ].filter(a=>a[2]);
- const shortcutMap={'Abrir':'openMessage','Responder':'reply','Responder a todos':'replyAll','Encaminhar':'forward','Marcar como lida':'markRead','Marcar como não lida':'markUnread','Mover…':'move','Imprimir':'print','Encaminhar como .eml':'forwardAttachment','Não é spam':'notSpam','Acompanhamento…':'followUp'};menu.innerHTML=actions.map((a,i)=>{const sc=shortcutMap[a[0]];return `<button data-cm="${i}" ${/Excluir definitivamente/.test(a[0])?'class="dangerAction"':''}><span>${esc(a[0])}</span>${sc?`<kbd>${esc(shortcutTooltip(sc,state.boot.settings).replace(/^.*\((.*)\)$/,'$1'))}</kbd>`:''}</button>`}).join('');
- document.body.append(menu);$$('[data-cm]',menu).forEach(b=>b.onclick=()=>{const fn=actions[Number(b.dataset.cm)][1];removeContextMenu();fn()});setTimeout(()=>document.addEventListener('pointerdown',removeContextMenu,{once:true}),0)
+ const shortcutMap={'Abrir':'openMessage','Responder':'reply','Responder a todos':'replyAll','Encaminhar':'forward','Marcar como lida':'markRead','Marcar como não lida':'markUnread','Mover…':'move','Imprimir':'print','Encaminhar como .eml':'forwardAttachment','Não é spam':'notSpam','Acompanhamento…':'followUp'};menu.innerHTML=actions.map((a,i)=>{const sc=shortcutMap[a[0]];return `<button data-cm="${i}" ${/^Excluir/.test(a[0])?'class="dangerAction"':''}><span>${esc(a[0])}</span>${sc?`<kbd>${esc(shortcutTooltip(sc,state.boot.settings).replace(/^.*\((.*)\)$/,'$1'))}</kbd>`:''}</button>`}).join('');
+ document.body.append(menu);menu.style.top=`${Math.max(8,Math.min(y,window.innerHeight-menu.getBoundingClientRect().height-8))}px`;menu.setAttribute('role','menu');menu.setAttribute('aria-label','Ações de mensagem');menu.tabIndex=-1;menu.addEventListener('keydown',e=>{if(e.key==='Escape'){removeContextMenu();return;}if(!['ArrowDown','ArrowUp'].includes(e.key))return;e.preventDefault();const opts=$$('[data-cm]',menu);const i=opts.indexOf(document.activeElement);opts[(i+(e.key==='ArrowDown'?1:-1)+opts.length)%opts.length]?.focus()});$$('[data-cm]',menu).forEach(b=>b.onclick=()=>{const fn=actions[Number(b.dataset.cm)][1];removeContextMenu();fn()});setTimeout(()=>document.addEventListener('pointerdown',removeContextMenu,{once:true}),0)
 }
 function applyUnreadLocally(ids,unread){const set=new Set(ids.map(Number));for(const item of state.items){if(set.has(Number(item.id)))item.unread=!!unread}if(state.current&&set.has(Number(state.current.id)))state.current.unread=!!unread;renderVirtualRows();if(state.current&&set.has(Number(state.current.id)))renderReader(state.current)}
 async function setBulkFlags(ids,changes){ids=[...new Set(ids.map(Number))];const hasUnread=changes.unread!==undefined&&changes.unread!==null;if(hasUnread)applyUnreadLocally(ids,changes.unread);const results=await Promise.allSettled(ids.map(id=>invoke('set_flags',{req:{id,unread:changes.unread??null,starred:changes.starred??null,pinned:changes.pinned??null,priority:changes.priority??null}})));if(results.some(r=>r.status==='rejected')){await loadMessages(null,false,{preserveScroll:true,preserveCurrent:true,preserveSelection:true});showError('Uma ou mais mensagens não puderam ser atualizadas.')}else{refreshUnreadCounts().catch(()=>{})}}

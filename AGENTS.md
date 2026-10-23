@@ -5,7 +5,7 @@ Aplicável a todas as alterações deste repositório. Este arquivo orienta agen
 ## Identidade, segurança e limites
 
 - Fonte canônica: este repositório. Antes de alterar, obter `git status`, commit-base e diffs. Nunca substituir silenciosamente código atualizado por ZIP antigo.
-- Versão corrente: `0.8.2-rc5`; somente modificar a versão quando solicitado. Preservar `com.thecreativesolver.TCSMail` e os dados persistidos do usuário.
+- Versão corrente: `0.8.2-rc6`; somente modificar a versão quando solicitado. Preservar `com.thecreativesolver.TCSMail` e os dados persistidos do usuário.
 - Não publicar releases ou registrar dados de mensagens, tokens, credenciais, endereços e conteúdo de e-mail em logs/testes. Use caixas e tokens sintéticos.
 - Todo o trabalho do usuário fica em `~/Projetos`; preservar `TCS-Mail-P2`, `TCS-Mail-Validacao`, fontes, credenciais, bancos e anexos. A limpeza exige listagem prévia e confirmação explícita.
 - Nenhuma correção específica de Windows pode alterar indevidamente Linux ou macOS. Examinar todos os `cfg` por plataforma e cobrir Windows x64, Linux x64, macOS Intel e ARM64.
@@ -29,11 +29,18 @@ Aplicável a todas as alterações deste repositório. Este arquivo orienta agen
 - Linux: DEB e RPM; AppStream, `.desktop`, ícones, versões específicas e recursos sem entradas duplicadas.
 - macOS Intel/ARM64: `APP` + `DMG`, `.app.zip` via `ditto`, recursos/symlinks, Keychain.
 
+## RC6 — gates de movimentação e compiladores
+
+- Todo menu de seleção de pastas deve exibir `display_name` decodificado e enviar `name` original, com separador/prefixo correto. Nunca enviar o rótulo traduzido ao servidor.
+- Ações drag-and-drop devem exigir seleção homogênea da mesma conta, destino selecionável, token efêmero, confirmação antes de movimentar, tratamento de falhas parciais e alternativas sem mouse.
+- Em mensagens, `Excluir` deve ficar entre as primeiras ações do menu de contexto, que precisa caber na viewport, rolar e ser acessível por teclado. Exclusão definitiva exige confirmação.
+- Dropdowns devem abrir no espaço disponível acima/abaixo, sem ficarem cortados por modais ou barras; conferir temas e contraste nos três mecanismos nativos.
+- Verificadores Python sempre usam UTF-8 explicitamente, com gate; contratos que leem código Rust devem aceitar rustfmt e variações de quebra de linha.
+- Executar testes de `folder_move`, contrato de RC6 e UTF-8 em **todos** os jobs; exigir build real dos quatro destinos e os dois formatos Linux locais antes de homologar.
+
 ## Gates e anti-recorrência
 
 - Todos os scripts Python de CI devem ler arquivos UTF-8 com `Path.read_text(encoding="utf-8")`; evitar a codificação padrão do Windows. O workflow deve ativar `PYTHONUTF8=1` e executar `test_utf8_ci_sources.py` em todos os runners.
-
-- Contratos CI de Rust não devem exigir espaçamento literal de chamadas formatadas por rustfmt; usar verificações estruturais que aceitem quebras de linha e vírgulas finais, e testar as duas formas.
 
 Antes de commit / push (no Ubuntu, com CARGO_HOME/RUSTUP_HOME isolados):
 
@@ -44,16 +51,23 @@ cargo check --locked --workspace --all-targets
 cargo test --locked --workspace
 cargo clippy --locked --workspace --all-targets -- -D warnings
 python3 scripts/quality/tcsmail-package-guard.py --source
-python3 scripts/quality/rc5-providers-and-release.py
+python3 scripts/quality/test_utf8_ci_sources.py
+python3 scripts/quality/rc6-ui-and-packager.py
+node scripts/quality/rc6-folder-move.test.mjs
+python3 scripts/quality/rc6-providers-and-release.py
 python3 scripts/quality/test_tcsmail_package_guard.py
 python3 scripts/quality/rc2-presentation-verify.py --source
 node scripts/verify-ms-oauth.mjs
 node scripts/quality/rc2-release-contract.mjs
 node scripts/quality/rc2-interface-regression.mjs
 node scripts/quality/rc2-native-composer-behavior.mjs
-node scripts/quality/rc5-composer-routing.mjs
+node scripts/quality/rc6-composer-routing.mjs
+node scripts/quality/rc6-provider-sync-contract.mjs
+python3 scripts/quality/rc6_crossplatform_regression.py
 git diff --check
 ```
+
+No Ubuntu, o gerenciador local deve comprovar DEB e RPM usando o mesmo pacote de testes do CI.
 
 No GitHub, executar todos os quatro jobs de `.github/workflows/tcsmail-homologacao.yml` em **novo commit**. `cargo fmt --check` e Clippy são bloqueantes. Cada job deve empacotar **todos** os formatos solicitados e inspecionar os arquivos gerados antes do upload. `Actions verde` não significa aplicativo homologado.
 
@@ -61,7 +75,7 @@ Falha recorrente deve gerar: (a) teste de regressão que falha antes da correç�
 
 ### Empacotamento e versões
 
-- SemVer público `0.8.2-rc5`; MSI/WiX `0.8.205`; RPM `Version=0.8.2, Release=0.rc5.1` via override de **empacotamento**, não mudança global de identidade.
+- SemVer público `0.8.2-rc6`; MSI/WiX `0.8.206`; RPM `Version=0.8.2, Release=0.rc6.1` via override de **empacotamento**, não mudança global de identidade.
 - Não declarar manualmente no RPM os aliases `tcs-mail.png` que o Tauri já escreve. Não exigir aliases removidos como entradas **configuradas**; inspecionar os recursos **reais**.
 - No macOS, evitar shadowing de import Python (`subprocess`) e preservar o `.app` com `ditto`.
 - O `AGENTS.md` orienta, mas o controle efetivo depende dos gates de CI, dos testes e da revisão do diff.
