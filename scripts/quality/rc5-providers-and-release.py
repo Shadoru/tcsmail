@@ -16,8 +16,8 @@ assert 'cargo test --locked --workspace' in work
 assert 'tcsmail-package-guard.py --bundles' in work
 assert 'rc5-providers-and-release.py' in work
 lib=(root/'src-tauri/src/lib.rs').read_text()
-assert '.sync_recent_async(account_id, &folder_for_sync, 100)' in lib
-assert 'reconcile_folder_async(account_id, &folder).await' in lib
+assert re.search(r'\.sync_recent_async\s*\(\s*account_id\s*,\s*&\s*folder_for_sync\s*,\s*100\s*,?\s*\)', lib, re.S), 'Missing provider-neutral first-page sync'
+assert re.search(r'\breconcile_folder_async\s*\(\s*account_id\s*,\s*&\s*folder\s*,?\s*\)\s*\.await\b', lib, re.S), 'Missing awaited per-folder reconciliation'
 assert 'CREATE_NO_WINDOW' in lib
 asyncmail=(root/'crates/tcs-core/src/async_mail.rs').read_text()
 assert 'display_mailbox_name' in asyncmail

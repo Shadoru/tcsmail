@@ -31,6 +31,8 @@ Aplicável a todas as alterações deste repositório. Este arquivo orienta agen
 
 ## Gates e anti-recorrência
 
+- Contratos CI de Rust não devem exigir espaçamento literal de chamadas formatadas por rustfmt; usar verificações estruturais que aceitem quebras de linha e vírgulas finais, e testar as duas formas.
+
 Antes de commit / push (no Ubuntu, com CARGO_HOME/RUSTUP_HOME isolados):
 
 ```
