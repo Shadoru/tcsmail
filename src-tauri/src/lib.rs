@@ -3,50 +3,17 @@ mod window_key;
 // RC2 diagnostic journal: records only event classes and source locations, NEVER
 // message bodies, passwords, token values, addresses or user-provided strings.
 mod diagnostic_journal {
-    use std::{
-        fs::{self, OpenOptions},
-        io::Write,
-        path::PathBuf,
-        sync::{
-            atomic::{AtomicBool, Ordering},
-            Once,
-        },
-    };
+    use std::{fs::{self, OpenOptions}, io::Write, path::PathBuf, sync::{Once, atomic::{AtomicBool, Ordering}}};
     static INIT: Once = Once::new();
     static PANIC_SEEN: AtomicBool = AtomicBool::new(false);
-    fn base() -> PathBuf {
-        super::data_dir().join("diagnostics")
-    }
+    fn base() -> PathBuf { super::data_dir().join("diagnostics") }
     fn write_event(event: &str) {
-        if !matches!(
-            event,
-            "startup"
-                | "normal_exit"
-                | "rust_panic"
-                | "javascript_error"
-                | "javascript_rejection"
-                | "support_view"
-        ) {
-            return;
-        }
-        let folder = base();
-        if fs::create_dir_all(&folder).is_err() {
-            return;
-        }
-        let file = folder.join("events.log");
-        if let Ok(meta) = fs::metadata(&file) {
-            if meta.len() > 256 * 1024 {
-                let _ = fs::rename(&file, folder.join("events.previous.log"));
-            }
-        }
-        if let Ok(mut f) = OpenOptions::new().create(true).append(true).open(file) {
-            let _ = writeln!(
-                f,
-                "{} | {} | {}",
-                chrono::Utc::now().to_rfc3339(),
-                env!("CARGO_PKG_VERSION"),
-                event
-            );
+        if !matches!(event, "startup"|"normal_exit"|"rust_panic"|"javascript_error"|"javascript_rejection"|"support_view") {return}
+        let folder=base(); if fs::create_dir_all(&folder).is_err(){return}
+        let file=folder.join("events.log");
+        if let Ok(meta)=fs::metadata(&file){if meta.len()>256*1024{let _=fs::rename(&file,folder.join("events.previous.log"));}}
+        if let Ok(mut f)=OpenOptions::new().create(true).append(true).open(file) {
+            let _=writeln!(f,"{} | {} | {}",chrono::Utc::now().to_rfc3339(),env!("CARGO_PKG_VERSION"),event);
         }
     }
     pub fn begin() {
@@ -58,65 +25,41 @@ mod diagnostic_journal {
                 previous(info);
             }));
         });
-        let folder = base();
-        let _ = fs::create_dir_all(&folder);
-        let running = folder.join("session.running");
-        if running.exists() {
-            let _ = fs::write(
-                folder.join("last-unclean.txt"),
-                format!("{}\n", chrono::Utc::now().to_rfc3339()),
-            );
+        let folder=base();let _=fs::create_dir_all(&folder);
+        let running=folder.join("session.running");
+        if running.exists(){
+            let _=fs::write(folder.join("last-unclean.txt"),format!("{}\n",chrono::Utc::now().to_rfc3339()));
         }
         // Clear the last incident ONLY when the user explicitly resolves it.
-        let _ = fs::write(running, format!("{}\n", std::process::id()));
+        let _=fs::write(running,format!("{}\n",std::process::id()));
         write_event("startup");
     }
     pub fn end() {
         if !PANIC_SEEN.load(Ordering::SeqCst) {
             write_event("normal_exit");
-            let _ = fs::remove_file(base().join("session.running"));
+            let _=fs::remove_file(base().join("session.running"));
         }
     }
-    pub fn log_client(kind: &str) -> Result<(), String> {
-        if !matches!(kind, "javascript_error" | "javascript_rejection") {
-            return Err("Classe de evento inválida".into());
-        }
-        write_event(kind);
-        Ok(())
+    pub fn log_client(kind:&str) -> Result<(),String> {
+        if !matches!(kind,"javascript_error"|"javascript_rejection"){return Err("Classe de evento inválida".into())}
+        write_event(kind);Ok(())
     }
     pub fn report() -> serde_json::Value {
-        let incident = fs::read_to_string(base().join("last-unclean.txt"))
-            .ok()
-            .and_then(|v| v.lines().next().map(str::to_owned));
-        let events = fs::read_to_string(base().join("events.log")).unwrap_or_default();
-        let events = events
-            .lines()
-            .rev()
-            .take(30)
-            .collect::<Vec<_>>()
-            .into_iter()
-            .rev()
-            .collect::<Vec<_>>()
-            .join("\n");
+        let incident=fs::read_to_string(base().join("last-unclean.txt")).ok().and_then(|v|v.lines().next().map(str::to_owned));
+        let events=fs::read_to_string(base().join("events.log")).unwrap_or_default();
+        let events=events.lines().rev().take(30).collect::<Vec<_>>().into_iter().rev().collect::<Vec<_>>().join("\n");
         let body=format!("TCS Mail — Relatório técnico de incidente\nVersão: {}\nSistema: {} / {}\nStatus: {}\n\nEventos recentes (categorias, sem dados pessoais):\n{}\n",env!("CARGO_PKG_VERSION"),std::env::consts::OS,std::env::consts::ARCH,if incident.is_some(){"Encerramento anterior não confirmado"}else{"Sem encerramento pendente"},events);
         serde_json::json!({"pending":incident.is_some(),"incidentId":incident,"report":body})
     }
-    pub fn acknowledge() {
-        let _ = fs::remove_file(base().join("last-unclean.txt"));
-    }
+    pub fn acknowledge(){let _=fs::remove_file(base().join("last-unclean.txt"));}
 }
 #[tauri::command]
-fn diagnostics_incident_report() -> serde_json::Value {
-    diagnostic_journal::report()
-}
+fn diagnostics_incident_report() -> serde_json::Value {diagnostic_journal::report()}
 #[tauri::command]
-fn diagnostics_record_client(kind: String) -> Result<(), String> {
-    diagnostic_journal::log_client(&kind)
-}
+fn diagnostics_record_client(kind:String)->Result<(),String>{diagnostic_journal::log_client(&kind)}
 #[tauri::command]
-fn diagnostics_acknowledge_incident() {
-    diagnostic_journal::acknowledge()
-}
+fn diagnostics_acknowledge_incident(){diagnostic_journal::acknowledge()}
+
 
 use std::path::PathBuf;
 
@@ -649,18 +592,15 @@ fn notify_message_actionable(state: AppState, message_id: i64, title: String, bo
 #[cfg(target_os = "linux")]
 fn disable_linux_tcs_background_units() {
     for unit in [
-        "tcs-mail-0.8-background.timer",
-        "tcs-mail-0.8-background.service",
-        "tcs-mail-0.8-idle.service",
-        "tcs-mail-background.timer",
-        "tcs-mail-background.service",
-        "tcs-mail-idle.service",
+        "tcs-mail-0.8-background.timer", "tcs-mail-0.8-background.service",
+        "tcs-mail-0.8-idle.service", "tcs-mail-background.timer",
+        "tcs-mail-background.service", "tcs-mail-idle.service",
     ] {
         match std::process::Command::new("systemctl")
             .args(["--user", "disable", "--now", unit])
             .output()
         {
-            Ok(output) if output.status.success() => {}
+            Ok(output) if output.status.success() => {},
             Ok(output) => {
                 let detail = String::from_utf8_lossy(&output.stderr);
                 // Missing historical units are normal. Real problems remain visible.
@@ -668,10 +608,7 @@ fn disable_linux_tcs_background_units() {
                     && !detail.contains("not loaded")
                     && !detail.contains("No such file")
                 {
-                    eprintln!(
-                        "TCS Mail: não foi possível desativar {unit}: {}",
-                        detail.trim()
-                    );
+                    eprintln!("TCS Mail: não foi possível desativar {unit}: {}", detail.trim());
                 }
             }
             Err(err) => eprintln!("TCS Mail: systemctl não disponível: {err}"),
@@ -732,7 +669,7 @@ fn configure_tray(app: &tauri::AppHandle, enabled: bool) -> Result<(), String> {
                 }
                 #[cfg(not(target_os = "linux"))]
                 app.exit(0);
-            }
+            },
             _ => {}
         });
     if let Some(icon) = app.default_window_icon() {
@@ -1096,10 +1033,7 @@ async fn list_messages(
 // Display an already indexed message immediately. Network hydration is explicitly
 // requested later, never performed on the critical path of the first paint.
 #[tauri::command]
-async fn get_message_cached(
-    id: i64,
-    state: State<'_, AppState>,
-) -> Result<Option<MessageDetail>, String> {
+async fn get_message_cached(id: i64, state: State<'_, AppState>) -> Result<Option<MessageDetail>, String> {
     let store = state.store.clone();
     tauri::async_runtime::spawn_blocking(move || store.detail(id))
         .await
@@ -1149,37 +1083,28 @@ async fn sync_recent(
         .map(|mut pending| pending.insert(key.clone()))
         .unwrap_or(false);
     if scheduled {
-        let background = st.clone();
-        tauri::async_runtime::spawn(async move {
-            // Keep maintenance off the first-paint critical path. Operations still
-            // serialize through the account coordinator and validate UIDVALIDITY.
-            tokio::time::sleep(std::time::Duration::from_secs(10)).await;
-            let now = Local::now().timestamp();
-            if background
-                .store
-                .last_reconcile_ts(account_id, &folder)
-                .unwrap_or(0)
-                < now - 900
-            {
-                if let Err(error) = background
-                    .sync
-                    .reconcile_folder_async(account_id, &folder)
-                    .await
-                {
-                    eprintln!("TCS Mail: reconciliação IMAP adiada/não concluída: {error}");
-                }
+      let background = st.clone();
+      tauri::async_runtime::spawn(async move {
+        // Keep maintenance off the first-paint critical path. Operations still
+        // serialize through the account coordinator and validate UIDVALIDITY.
+        tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+        let now = Local::now().timestamp();
+        if background.store.last_reconcile_ts(account_id, &folder).unwrap_or(0) < now - 900 {
+            if let Err(error) = background.sync.reconcile_folder_async(account_id, &folder).await {
+                eprintln!("TCS Mail: reconciliação IMAP adiada/não concluída: {error}");
             }
-            let rules_state = background.clone();
-            let _ = tauri::async_runtime::spawn_blocking(move || {
-                process_rules(&rules_state, account_id)
-            })
-            .await;
-            if let Some(lock) = MAINTENANCE.get() {
-                if let Ok(mut pending) = lock.lock() {
-                    pending.remove(&key);
-                }
+        }
+        let rules_state = background.clone();
+        let _ = tauri::async_runtime::spawn_blocking(move || {
+            process_rules(&rules_state, account_id)
+        })
+        .await;
+        if let Some(lock) = MAINTENANCE.get() {
+            if let Ok(mut pending) = lock.lock() {
+                pending.remove(&key);
             }
-        });
+        }
+      });
     }
     Ok(result)
 }
@@ -1422,9 +1347,7 @@ async fn confirm_cached_message_identity(
             return Err("Identidade IMAP local incompleta; sincronize a pasta".into());
         }
         let db = store.legacy()?;
-        let current = db
-            .get_message(message_id)
-            .map_err(|e| e.to_string())?
+        let current = db.get_message(message_id).map_err(|e| e.to_string())?
             .ok_or("Mensagem local não encontrada; atualize a pasta")?;
         if current.account_id != account_id || current.folder != folder || current.uid != uid {
             return Err("Mensagem modificada durante operação; tente novamente".into());
@@ -1433,9 +1356,7 @@ async fn confirm_cached_message_identity(
             return Err("UIDVALIDITY local alterada; sincronize a pasta".into());
         }
         Ok(())
-    })
-    .await
-    .map_err(|e| e.to_string())?
+    }).await.map_err(|e| e.to_string())?
 }
 
 /// Keep the snapshot and the current folder epoch equal across the account
@@ -1447,16 +1368,12 @@ async fn confirm_cached_folder_epoch(
     expected_validity: u32,
 ) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
-        if expected_validity == 0
-            || folder.trim().is_empty()
-            || store.sync_state(account_id, &folder)?.0 != Some(expected_validity)
-        {
+        if expected_validity == 0 || folder.trim().is_empty()
+            || store.sync_state(account_id, &folder)?.0 != Some(expected_validity) {
             return Err("UIDVALIDITY local ausente ou alterada; sincronize a pasta".into());
         }
         Ok(())
-    })
-    .await
-    .map_err(|e| e.to_string())?
+    }).await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -1479,11 +1396,8 @@ async fn reply_context(
                 .map_err(|e| e.to_string())?
                 .ok_or("Conta não encontrada")?;
             let identities = db.list_identities(Some(account.id)).unwrap_or_default();
-            let expected_validity = store
-                .sync_state(account.id, &message.folder)
-                .ok()
-                .and_then(|state| state.0)
-                .filter(|v| *v != 0);
+            let expected_validity = store.sync_state(account.id, &message.folder)
+                .ok().and_then(|state| state.0).filter(|v| *v != 0);
             Ok::<_, String>((message, account, identities, expected_validity))
         })
         .await
@@ -1494,33 +1408,18 @@ async fn reply_context(
     let (remote_reply, uncertain) = match tcs_core::oauth::mail_auth_secret(&account) {
         Ok(credential) => {
             let fetch = async {
-                let _guard =
-                    tcs_core::async_mail::coordination::acquire_account_operation(account.id)
-                        .await
-                        .map_err(|e| e.to_string())?;
+                let _guard = tcs_core::async_mail::coordination::acquire_account_operation(account.id)
+                    .await.map_err(|e| e.to_string())?;
                 let validity = expected_validity.ok_or(
-                    "UIDVALIDITY local ausente; sincronize a pasta antes de responder".to_string(),
+                    "UIDVALIDITY local ausente; sincronize a pasta antes de responder".to_string()
                 )?;
                 confirm_cached_message_identity(
-                    verify_store.clone(),
-                    id,
-                    account.id,
-                    message.folder.clone(),
-                    message.uid,
-                    validity,
-                )
-                .await?;
+                    verify_store.clone(), id, account.id, message.folder.clone(), message.uid, validity
+                ).await?;
                 let mut session = tcs_core::async_mail::login_secure(&account, &credential)
-                    .await
-                    .map_err(|e| e.to_string())?;
-                let reply = tcs_core::async_mail::fetch_reply_to_if_epoch(
-                    &mut session,
-                    &message.folder,
-                    message.uid,
-                    validity,
-                )
-                .await
-                .map_err(|e| e.to_string());
+                    .await.map_err(|e| e.to_string())?;
+                let reply = tcs_core::async_mail::fetch_reply_to_if_epoch(&mut session, &message.folder, message.uid, validity)
+                    .await.map_err(|e| e.to_string());
                 let _ = session.logout().await;
                 reply
             };
@@ -1647,11 +1546,8 @@ async fn list_folder_tree(
         let roles = tcs_core::async_mail::special_folders_from_tree(tree);
         tauri::async_runtime::spawn_blocking(move || {
             let db = persist_store.legacy()?;
-            db.set_folder_roles(account_id, &roles)
-                .map_err(|e| e.to_string())
-        })
-        .await
-        .map_err(|e| e.to_string())??;
+            db.set_folder_roles(account_id, &roles).map_err(|e| e.to_string())
+        }).await.map_err(|e| e.to_string())??;
     }
     result
 }
@@ -1802,48 +1698,37 @@ async fn get_raw_source(message_id: i64, state: State<'_, AppState>) -> Result<S
     // operations below run asynchronously on the Tauri Tokio runtime.
     let store = state.store.clone();
     let verify_store = state.store.clone();
-    let (account, credential, folder, uid, validity) =
-        tauri::async_runtime::spawn_blocking(move || {
-            let db = store.legacy()?;
-            let message = db
-                .get_message(message_id)
-                .map_err(|e| e.to_string())?
-                .ok_or("Mensagem não encontrada")?;
-            let account = db
-                .get_account(message.account_id)
-                .map_err(|e| e.to_string())?
-                .ok_or("Conta não encontrada")?;
-            let credential = tcs_core::oauth::mail_auth_secret(&account)?;
-            let validity = store
-                .sync_state(message.account_id, &message.folder)?
-                .0
-                .filter(|v| *v != 0)
-                .ok_or("UIDVALIDITY local ausente; sincronize a pasta")?;
-            Ok::<_, String>((account, credential, message.folder, message.uid, validity))
-        })
-        .await
-        .map_err(|e| e.to_string())??;
+    let (account, credential, folder, uid, validity) = tauri::async_runtime::spawn_blocking(move || {
+        let db = store.legacy()?;
+        let message = db
+            .get_message(message_id)
+            .map_err(|e| e.to_string())?
+            .ok_or("Mensagem não encontrada")?;
+        let account = db
+            .get_account(message.account_id)
+            .map_err(|e| e.to_string())?
+            .ok_or("Conta não encontrada")?;
+        let credential = tcs_core::oauth::mail_auth_secret(&account)?;
+        let validity = store.sync_state(message.account_id, &message.folder)?.0
+            .filter(|v| *v != 0).ok_or("UIDVALIDITY local ausente; sincronize a pasta")?;
+        Ok::<_, String>((account, credential, message.folder, message.uid, validity))
+    })
+    .await
+    .map_err(|e| e.to_string())??;
     let _account_operation =
         tcs_core::async_mail::coordination::acquire_account_operation(account.id)
             .await
             .map_err(|e| e.to_string())?;
     confirm_cached_message_identity(
-        verify_store.clone(),
-        message_id,
-        account.id,
-        folder.clone(),
-        uid,
-        validity,
-    )
-    .await?;
+        verify_store.clone(), message_id, account.id, folder.clone(), uid, validity
+    ).await?;
     let mut session = tcs_core::async_mail::login_secure(&account, &credential)
         .await
         .map_err(|e| e.to_string())?;
-    let result =
-        tcs_core::async_mail::read_raw_by_uid_if_epoch(&mut session, &folder, uid, validity)
-            .await
-            .map_err(|e| e.to_string())
-            .and_then(|raw| raw.ok_or_else(|| "Fonte RFC822 não disponível".to_string()));
+    let result = tcs_core::async_mail::read_raw_by_uid_if_epoch(&mut session, &folder, uid, validity)
+        .await
+        .map_err(|e| e.to_string())
+        .and_then(|raw| raw.ok_or_else(|| "Fonte RFC822 não disponível".to_string()));
     // Close the session even if FETCH fails; do not hide the FETCH result.
     let _ = session.logout().await;
     Ok(String::from_utf8_lossy(&result?).into_owned())
@@ -1875,11 +1760,8 @@ async fn attach_message_as_eml(
                 .map_err(|e| e.to_string())?
                 .ok_or("Conta não encontrada")?;
             let credential = tcs_core::oauth::mail_auth_secret(&account)?;
-            let validity = store
-                .sync_state(message.account_id, &message.folder)?
-                .0
-                .filter(|v| *v != 0)
-                .ok_or("UIDVALIDITY local ausente; sincronize a pasta")?;
+            let validity = store.sync_state(message.account_id, &message.folder)?.0
+                .filter(|v| *v != 0).ok_or("UIDVALIDITY local ausente; sincronize a pasta")?;
             Ok::<_, String>((
                 account,
                 credential,
@@ -1897,21 +1779,14 @@ async fn attach_message_as_eml(
             .await
             .map_err(|e| e.to_string())?;
     confirm_cached_message_identity(
-        verify_store.clone(),
-        message_id,
-        account.id,
-        folder.clone(),
-        uid,
-        validity,
-    )
-    .await?;
+        verify_store.clone(), message_id, account.id, folder.clone(), uid, validity
+    ).await?;
     let mut session = tcs_core::async_mail::login_secure(&account, &credential)
         .await
         .map_err(|e| e.to_string())?;
-    let fetched =
-        tcs_core::async_mail::read_raw_by_uid_if_epoch(&mut session, &folder, uid, validity)
-            .await
-            .map_err(|e| e.to_string());
+    let fetched = tcs_core::async_mail::read_raw_by_uid_if_epoch(&mut session, &folder, uid, validity)
+        .await
+        .map_err(|e| e.to_string());
     // Logout must be attempted even when FETCH failed; never mask FETCH errors.
     let _ = session.logout().await;
     // Release the per-account permit before filesystem/SQLite work begins.
@@ -2349,28 +2224,11 @@ async fn save_account(req: AccountInput, state: State<'_, AppState>) -> Result<i
 #[tauri::command]
 async fn delete_account(id: i64, state: State<'_, AppState>) -> Result<(), String> {
     let s = state.store.clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        let db = s.legacy()?;
-        if let Some(a) = db.get_account(id).map_err(|e| e.to_string())? {
-            if a.auth_method.eq_ignore_ascii_case("oauth2")
-                && a.oauth_provider.eq_ignore_ascii_case("google")
-            {
-                let _ = tcs_core::oauth::revoke_google_tokens(&a.email);
-            } else if a.auth_method.eq_ignore_ascii_case("oauth2")
-                && a.oauth_provider.eq_ignore_ascii_case("microsoft")
-            {
-                let _ = tcs_core::oauth::clear_microsoft_tokens(&a.email);
-            } else {
-                let _ = tcs_core::secrets::SecretStore::clear_password(&a.email);
-            }
-        }
-        s.conn()?
-            .execute("DELETE FROM accounts WHERE id=?1", rusqlite::params![id])
-            .map_err(|e| e.to_string())?;
-        Ok(())
-    })
-    .await
-    .map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move||{let db=s.legacy()?;if let Some(a)=db.get_account(id).map_err(|e|e.to_string())?{if a.auth_method.eq_ignore_ascii_case("oauth2")&&a.oauth_provider.eq_ignore_ascii_case("google"){
+            let _=tcs_core::oauth::revoke_google_tokens(&a.email);
+        }else if a.auth_method.eq_ignore_ascii_case("oauth2")&&a.oauth_provider.eq_ignore_ascii_case("microsoft"){
+            let _=tcs_core::oauth::clear_microsoft_tokens(&a.email);
+        }else{let _=tcs_core::secrets::SecretStore::clear_password(&a.email);}}s.conn()?.execute("DELETE FROM accounts WHERE id=?1",rusqlite::params![id]).map_err(|e|e.to_string())?;Ok(())}).await.map_err(|e|e.to_string())?
 }
 #[tauri::command]
 async fn diagnose_account(
@@ -2534,9 +2392,7 @@ fn wait_google_loopback_with_timeout(
                 if !peer.ip().is_loopback() {
                     continue;
                 }
-                stream
-                    .set_nonblocking(false)
-                    .map_err(|e| format!("Callback OAuth inválido: {e}"))?;
+                stream.set_nonblocking(false).map_err(|e| format!("Callback OAuth inválido: {e}"))?;
                 let _ = stream.set_read_timeout(Some(std::time::Duration::from_secs(3)));
                 let mut request = Vec::<u8>::with_capacity(2048);
                 let mut chunk = [0_u8; 2048];
@@ -2706,8 +2562,7 @@ fn google_oauth_connect_blocking(
         id: base.as_ref().map(|a| a.id).unwrap_or(0),
         // A mailbox label is local UI state, not the OAuth profile display name.
         // In particular, reauthorization MUST preserve the user-selected label.
-        name: base
-            .as_ref()
+        name: base.as_ref()
             .map(|a| a.name.clone())
             .unwrap_or_else(|| email.clone()),
         email: email.clone(),
@@ -2749,9 +2604,9 @@ fn google_oauth_connect_blocking(
     // First authorization: retain Google profile name as sender identity, distinct
     // from the mailbox label. Reauthorization preserves any customized identity.
     if base.is_none() && !identity.name.trim().is_empty() {
-        let key = format!("account.{}.identity.meta", id);
+        let key=format!("account.{}.identity.meta", id);
         if db.get_setting(&key).is_none() {
-            let meta = serde_json::json!({"display_name": identity.name, "enabled": true, "provider_validation": "primary-account"});
+            let meta=serde_json::json!({"display_name": identity.name, "enabled": true, "provider_validation": "primary-account"});
             let _ = db.set_setting(&key, &meta.to_string());
         }
     }
@@ -2876,55 +2731,28 @@ fn microsoft_oauth_connect_blocking(
     let (cancelled, _attempt_guard) = register_google_oauth_attempt(&attempt_id)?;
     let db = store.legacy()?;
     let existing = if let Some(id) = existing_account_id {
-        Some(
-            db.get_account(id)
-                .map_err(|e| e.to_string())?
-                .ok_or("Conta Microsoft inexistente")?,
-        )
-    } else {
-        None
-    };
-    if existing
-        .as_ref()
-        .is_some_and(|a| a.auth_method == "oauth2" && a.oauth_provider != "microsoft")
-    {
-        return Err(
-            "Reconexão Microsoft não pode substituir uma conta OAuth de outro provedor".into(),
-        );
+        Some(db.get_account(id).map_err(|e| e.to_string())?
+            .ok_or("Conta Microsoft inexistente")?)
+    } else { None };
+    if existing.as_ref().is_some_and(|a| a.auth_method == "oauth2" && a.oauth_provider != "microsoft") {
+        return Err("Reconexão Microsoft não pode substituir uma conta OAuth de outro provedor".into());
     }
-    let email = existing
-        .as_ref()
-        .map(|a| a.email.clone())
-        .or(email_hint)
-        .unwrap_or_default()
-        .trim()
-        .to_ascii_lowercase();
-    if email.is_empty()
-        || email.chars().any(char::is_whitespace)
-        || email.matches('@').count() != 1
-        || !email.split('@').next_back().unwrap_or("").contains('.')
-    {
+    let email = existing.as_ref().map(|a| a.email.clone())
+        .or(email_hint).unwrap_or_default().trim().to_ascii_lowercase();
+    if email.is_empty() || email.chars().any(char::is_whitespace)
+        || email.matches('@').count() != 1 || !email.split('@').next_back().unwrap_or("").contains('.') {
         return Err("Informe o endereço da caixa Microsoft para autenticação".into());
     }
     let listener = std::net::TcpListener::bind("127.0.0.1:0")
         .map_err(|e| format!("Callback OAuth Microsoft indisponível: {e}"))?;
-    let redirect_uri = format!(
-        "http://localhost:{}",
-        listener.local_addr().map_err(|e| e.to_string())?.port()
-    );
+    let redirect_uri = format!("http://localhost:{}", listener.local_addr().map_err(|e| e.to_string())?.port());
     let attempt = tcs_core::oauth::build_microsoft_authorization(&redirect_uri, Some(&email))?;
     open_url_default(&attempt.authorization_url)?;
     let code = wait_google_loopback_with_timeout(
-        listener,
-        &attempt.state,
-        std::time::Duration::from_secs(300),
-        Some(&cancelled),
-    )
-    .map_err(|error| error.replace("Google", "Microsoft"))?;
+        listener, &attempt.state, std::time::Duration::from_secs(300), Some(&cancelled),
+    ).map_err(|error| error.replace("Google", "Microsoft"))?;
     let mut tokens = tcs_core::oauth::exchange_microsoft_code(
-        &code,
-        &attempt.code_verifier,
-        &attempt.redirect_uri,
+        &code, &attempt.code_verifier, &attempt.redirect_uri,
     )?;
     // Preserve a valid token only when refreshing the exact same mailbox.
     if tokens.refresh_token.is_empty() {
@@ -2932,53 +2760,30 @@ fn microsoft_oauth_connect_blocking(
             tokens.refresh_token = old.refresh_token;
         }
     }
-    let base = existing.or_else(|| {
-        db.list_accounts()
-            .ok()?
-            .into_iter()
-            .find(|a| a.email.eq_ignore_ascii_case(&email))
-    });
-    if base
-        .as_ref()
-        .is_some_and(|a| a.auth_method == "oauth2" && a.oauth_provider != "microsoft")
-    {
+    let base = existing.or_else(|| db.list_accounts().ok()?.into_iter()
+        .find(|a| a.email.eq_ignore_ascii_case(&email)));
+    if base.as_ref().is_some_and(|a| a.auth_method == "oauth2" && a.oauth_provider != "microsoft") {
         return Err("A conta já está associada a outro provedor OAuth".into());
     }
     let account = Account {
         id: base.as_ref().map(|a| a.id).unwrap_or(0),
-        name: base
-            .as_ref()
-            .map(|a| a.name.clone())
-            .unwrap_or_else(|| email.clone()),
+        name: base.as_ref().map(|a| a.name.clone()).unwrap_or_else(|| email.clone()),
         email: email.clone(),
-        imap_host: "outlook.office365.com".into(),
-        imap_port: 993,
-        smtp_host: if matches!(
-            email.rsplit('@').next().unwrap_or(""),
-            "outlook.com" | "hotmail.com" | "live.com" | "msn.com"
-        ) {
+        imap_host: "outlook.office365.com".into(), imap_port: 993,
+        smtp_host: if matches!(email.rsplit('@').next().unwrap_or(""),
+                "outlook.com" | "hotmail.com" | "live.com" | "msn.com") {
             "smtp-mail.outlook.com".into()
-        } else {
-            "smtp.office365.com".into()
-        },
+        } else { "smtp.office365.com".into() },
         smtp_port: 587,
-        username: email.clone(),
-        use_tls: true,
-        imap_security: "tls".into(),
-        smtp_security: "starttls".into(),
-        auth_method: "oauth2".into(),
-        oauth_provider: "microsoft".into(),
+        username: email.clone(), use_tls: true,
+        imap_security: "tls".into(), smtp_security: "starttls".into(),
+        auth_method: "oauth2".into(), oauth_provider: "microsoft".into(),
         default_signature_id: base.as_ref().and_then(|a| a.default_signature_id),
-        color: base
-            .as_ref()
-            .map(|a| a.color.clone())
-            .unwrap_or_else(|| "#0078d4".into()),
+        color: base.as_ref().map(|a| a.color.clone()).unwrap_or_else(|| "#0078d4".into()),
     };
     // Fail CLOSED before writing the account or token. A Graph-only permission, wrong
     // mailbox, Exchange policy block, or invalid token must not create a broken account.
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
+    let rt = tokio::runtime::Builder::new_current_thread().enable_all().build()
         .map_err(|e| format!("Runtime de verificação Microsoft: {e}"))?;
     rt.block_on(async {
         let mut session = tokio::time::timeout(
@@ -2993,24 +2798,18 @@ fn microsoft_oauth_connect_blocking(
     let is_update = base.is_some();
     let id = db.save_account(&account).map_err(|e| e.to_string())?;
     if let Err(e) = tcs_core::oauth::store_microsoft_tokens(&email, &tokens) {
-        if let Some(previous) = base.as_ref() {
-            let _ = db.save_account(previous);
-        } else if let Ok(conn) = store.conn() {
+        if let Some(previous) = base.as_ref() { let _ = db.save_account(previous); }
+        else if let Ok(conn) = store.conn() {
             let _ = conn.execute("DELETE FROM accounts WHERE id=?1", rusqlite::params![id]);
         }
-        return Err(format!(
-            "Não foi possível salvar tokens Microsoft no cofre do sistema: {e}"
-        ));
+        return Err(format!("Não foi possível salvar tokens Microsoft no cofre do sistema: {e}"));
     }
     if is_update && base.as_ref().is_some_and(|a| a.auth_method == "password") {
         let _ = tcs_core::secrets::SecretStore::clear_password(&email);
     }
     Ok(GoogleOAuthConnectResult {
-        account_id: id,
-        email,
-        name: account.name,
-        converted_existing: is_update,
-        diagnostic: None,
+        account_id: id, email, name: account.name,
+        converted_existing: is_update, diagnostic: None,
     })
 }
 
@@ -3022,11 +2821,9 @@ async fn microsoft_oauth_connect(
     state: State<'_, AppState>,
 ) -> Result<GoogleOAuthConnectResult, String> {
     let store = state.store.clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    tauri::async_runtime::spawn_blocking(move ||
         microsoft_oauth_connect_blocking(store, existing_account_id, attempt_id, email_hint)
-    })
-    .await
-    .map_err(|e| e.to_string())?
+    ).await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -3038,20 +2835,14 @@ fn microsoft_oauth_cancel(attempt_id: String) -> Result<bool, String> {
 
 #[tauri::command]
 async fn microsoft_oauth_status(
-    account_id: i64,
-    state: State<'_, AppState>,
+    account_id: i64, state: State<'_, AppState>,
 ) -> Result<tcs_core::oauth::OAuthStatus, String> {
     let store = state.store.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let account = store
-            .legacy()?
-            .get_account(account_id)
-            .map_err(|e| e.to_string())?
-            .ok_or("Conta não encontrada")?;
+        let account = store.legacy()?.get_account(account_id)
+            .map_err(|e| e.to_string())?.ok_or("Conta não encontrada")?;
         Ok(tcs_core::oauth::microsoft_oauth_status(&account))
-    })
-    .await
-    .map_err(|e| e.to_string())?
+    }).await.map_err(|e| e.to_string())?
 }
 
 #[cfg(test)]
@@ -3130,9 +2921,7 @@ mod google_oauth_loopback_tests {
         });
         let mut unrelated = TcpStream::connect(addr).unwrap();
         unrelated
-            .write_all(
-                b"GET /favicon.ico?state=expected&code=wrong HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n",
-            )
+            .write_all(b"GET /favicon.ico?state=expected&code=wrong HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n")
             .unwrap();
         let mut reply = [0_u8; 1024];
         let n = unrelated.read(&mut reply).unwrap();
@@ -3154,10 +2943,8 @@ mod google_oauth_loopback_tests {
                 .unwrap_err()
         });
         let mut bad = TcpStream::connect(addr).unwrap();
-        bad.write_all(
-            b"GET /?code=one&code=two&state=expected HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n",
-        )
-        .unwrap();
+        bad.write_all(b"GET /?code=one&code=two&state=expected HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n")
+            .unwrap();
         let mut reply = [0_u8; 1024];
         let n = bad.read(&mut reply).unwrap();
         assert!(String::from_utf8_lossy(&reply[..n]).starts_with("HTTP/1.1 400"));
@@ -5046,11 +4833,8 @@ async fn export_message_eml(id: i64, state: State<'_, AppState>) -> Result<bool,
                 .map_err(|e| e.to_string())?
                 .ok_or("Conta não encontrada")?;
             let password = tcs_core::oauth::mail_auth_secret(&account)?;
-            let validity = store
-                .sync_state(message.account_id, &message.folder)?
-                .0
-                .filter(|v| *v != 0)
-                .ok_or("UIDVALIDITY local ausente; sincronize a pasta")?;
+            let validity = store.sync_state(message.account_id, &message.folder)?.0
+                .filter(|v| *v != 0).ok_or("UIDVALIDITY local ausente; sincronize a pasta")?;
             Ok::<_, String>((
                 account,
                 password,
@@ -5066,21 +4850,14 @@ async fn export_message_eml(id: i64, state: State<'_, AppState>) -> Result<bool,
         .await
         .map_err(|e| e.to_string())?;
     confirm_cached_message_identity(
-        verify_store.clone(),
-        id,
-        account.id,
-        folder.clone(),
-        uid,
-        validity,
-    )
-    .await?;
+        verify_store.clone(), id, account.id, folder.clone(), uid, validity
+    ).await?;
     let mut session = tcs_core::async_mail::login_secure(&account, &password)
         .await
         .map_err(|e| e.to_string())?;
-    let result =
-        tcs_core::async_mail::read_raw_by_uid_if_epoch(&mut session, &folder, uid, validity)
-            .await
-            .map_err(|e| e.to_string());
+    let result = tcs_core::async_mail::read_raw_by_uid_if_epoch(&mut session, &folder, uid, validity)
+        .await
+        .map_err(|e| e.to_string());
     let _ = session.logout().await;
     drop(_operation);
     let raw = result?.ok_or("Mensagem não encontrada no servidor")?;
@@ -5294,37 +5071,27 @@ async fn export_folder_mbox(
     let store = state.store.clone();
     let verify_store = state.store.clone();
     let requested_folder = folder.clone();
-    let (account, credential, messages, validity) =
-        tauri::async_runtime::spawn_blocking(move || {
-            let db = store.legacy()?;
-            let account = db
-                .get_account(account_id)
-                .map_err(|e| e.to_string())?
-                .ok_or("Conta não encontrada")?;
-            let credential = tcs_core::oauth::mail_auth_secret(&account)?;
-            let messages = db
-                .list_messages(Some(account_id), &folder, None, 100_000)
-                .map_err(|e| e.to_string())?;
-            let validity = store
-                .sync_state(account_id, &folder)?
-                .0
-                .filter(|v| *v != 0)
-                .ok_or("UIDVALIDITY local ausente; sincronize a pasta")?;
-            Ok::<_, String>((account, credential, messages, validity))
-        })
-        .await
-        .map_err(|e| e.to_string())??;
+    let (account, credential, messages, validity) = tauri::async_runtime::spawn_blocking(move || {
+        let db = store.legacy()?;
+        let account = db
+            .get_account(account_id)
+            .map_err(|e| e.to_string())?
+            .ok_or("Conta não encontrada")?;
+        let credential = tcs_core::oauth::mail_auth_secret(&account)?;
+        let messages = db
+            .list_messages(Some(account_id), &folder, None, 100_000)
+            .map_err(|e| e.to_string())?;
+        let validity = store.sync_state(account_id, &folder)?.0
+            .filter(|v| *v != 0).ok_or("UIDVALIDITY local ausente; sincronize a pasta")?;
+        Ok::<_, String>((account, credential, messages, validity))
+    })
+    .await
+    .map_err(|e| e.to_string())??;
 
     let _guard = tcs_core::async_mail::coordination::acquire_account_operation(account.id)
         .await
         .map_err(|e| e.to_string())?;
-    confirm_cached_folder_epoch(
-        verify_store.clone(),
-        account.id,
-        requested_folder.clone(),
-        validity,
-    )
-    .await?;
+    confirm_cached_folder_epoch(verify_store.clone(), account.id, requested_folder.clone(), validity).await?;
     let mut session = tcs_core::async_mail::login_secure(&account, &credential)
         .await
         .map_err(|e| e.to_string())?;
@@ -5351,28 +5118,19 @@ async fn export_folder_mbox(
             .map_err(|e| e.to_string())?;
         let mut count = 0usize;
         for message in messages {
-            if message.folder != requested_folder
-                || message.uid == 0
-                || message.account_id != account.id
-            {
-                return Err(
-                    "Lista de exportação IMAP inconsistente; cancele e sincronize a pasta".into(),
-                );
+            if message.folder != requested_folder || message.uid == 0 || message.account_id != account.id {
+                return Err("Lista de exportação IMAP inconsistente; cancele e sincronize a pasta".into());
             }
-            let raw = tcs_core::async_mail::read_raw_by_uid_if_epoch(
-                &mut session,
-                &message.folder,
-                message.uid,
-                validity,
-            )
-            .await
-            .map_err(|e| e.to_string())?
-            .ok_or_else(|| {
-                format!(
-                    "Mensagem UID {} não encontrada durante exportação",
-                    message.uid
-                )
-            })?;
+            let raw =
+                tcs_core::async_mail::read_raw_by_uid_if_epoch(&mut session, &message.folder, message.uid, validity)
+                    .await
+                    .map_err(|e| e.to_string())?
+                    .ok_or_else(|| {
+                        format!(
+                            "Mensagem UID {} não encontrada durante exportação",
+                            message.uid
+                        )
+                    })?;
             // Preserve the existing MBOX separator and trailing newline contract.
             let separator = format!("From - {}\n", chrono::Local::now().to_rfc2822());
             file.write_all(separator.as_bytes())
@@ -7075,8 +6833,6 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("erro ao preparar TCS Mail")
         .run(|_app, event| {
-            if let tauri::RunEvent::Exit = event {
-                diagnostic_journal::end();
-            }
+            if let tauri::RunEvent::Exit = event {diagnostic_journal::end();}
         });
 }

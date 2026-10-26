@@ -370,31 +370,12 @@ impl CoreStore {
         } = scope;
         let c = self.conn()?;
         let lim = limit.clamp(1, 200) as i64;
-        let ordering = search
-            .unwrap_or("")
-            .split_whitespace()
-            .find_map(|token| token.strip_prefix("tcs-sort:"));
-        let (sort_key, sort_dir) = ordering
-            .and_then(|v| v.split_once(':'))
-            .unwrap_or(("date", "desc"));
-        let sort_column = match sort_key {
-            "sender" => "lower(m.from_name || ' ' || m.from_email)",
-            "recipient" => "lower(COALESCE(m.to_text,''))",
-            "subject" => "lower(m.subject)",
-            "size" => "length(m.body_text)",
-            _ => "m.date_ts",
-        };
-        let sort_direction = if sort_dir == "asc" { "ASC" } else { "DESC" };
+        let ordering = search.unwrap_or("").split_whitespace().find_map(|token| token.strip_prefix("tcs-sort:"));
+        let (sort_key, sort_dir) = ordering.and_then(|v| v.split_once(':')).unwrap_or(("date", "desc"));
+        let sort_column = match sort_key {"sender" => "lower(m.from_name || ' ' || m.from_email)","recipient" => "lower(COALESCE(m.to_text,''))","subject" => "lower(m.subject)","size" => "length(m.body_text)",_ => "m.date_ts"};
+        let sort_direction = if sort_dir == "asc" {"ASC"} else {"DESC"};
         let custom_sort = ordering.is_some();
-        let page_offset = if custom_sort {
-            cursor
-                .and_then(|v| v.strip_prefix("o:"))
-                .and_then(|v| v.parse::<i64>().ok())
-                .unwrap_or(0)
-                .max(0)
-        } else {
-            0
-        };
+        let page_offset = if custom_sort {cursor.and_then(|v| v.strip_prefix("o:")).and_then(|v|v.parse::<i64>().ok()).unwrap_or(0).max(0)} else {0};
         let (before_ts, before_id) = parse_cursor(cursor);
         let mut where_parts = Vec::new();
         let mut values: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
@@ -458,9 +439,7 @@ impl CoreStore {
         if let Some(raw) = search.filter(|s| !s.trim().is_empty()) {
             let mut terms = Vec::new();
             for token in search_tokens(raw) {
-                if token.starts_with("tcs-sort:") {
-                    continue;
-                }
+                if token.starts_with("tcs-sort:") {continue}
                 if let Some(v) = token.strip_prefix("from:") {
                     let n = values.len() + 1;
                     where_parts.push(format!(
@@ -534,11 +513,7 @@ impl CoreStore {
         } else {
             format!(" WHERE {}", where_parts.join(" AND "))
         };
-        let sql = if custom_sort {
-            format!("SELECT m.id,m.account_id,m.folder,m.uid,m.subject,m.from_name,m.from_email,m.date_ts,m.snippet,m.unread,m.starred,m.pinned,m.priority,m.spam,m.has_attachments,m.message_id,m.in_reply_to,m.references_text,length(m.body_text),m.to_text FROM messages m {joins}{where_sql} ORDER BY {sort_column} {sort_direction},m.id {sort_direction} LIMIT {} OFFSET {page_offset}",lim+1)
-        } else {
-            format!("SELECT m.id,m.account_id,m.folder,m.uid,m.subject,m.from_name,m.from_email,m.date_ts,m.snippet,m.unread,m.starred,m.pinned,m.priority,m.spam,m.has_attachments,m.message_id,m.in_reply_to,m.references_text,length(m.body_text),m.to_text FROM messages m {joins}{where_sql} ORDER BY m.pinned DESC,m.date_ts DESC,m.id DESC LIMIT {}",lim+1)
-        };
+        let sql=if custom_sort {format!("SELECT m.id,m.account_id,m.folder,m.uid,m.subject,m.from_name,m.from_email,m.date_ts,m.snippet,m.unread,m.starred,m.pinned,m.priority,m.spam,m.has_attachments,m.message_id,m.in_reply_to,m.references_text,length(m.body_text),m.to_text FROM messages m {joins}{where_sql} ORDER BY {sort_column} {sort_direction},m.id {sort_direction} LIMIT {} OFFSET {page_offset}",lim+1)} else {format!("SELECT m.id,m.account_id,m.folder,m.uid,m.subject,m.from_name,m.from_email,m.date_ts,m.snippet,m.unread,m.starred,m.pinned,m.priority,m.spam,m.has_attachments,m.message_id,m.in_reply_to,m.references_text,length(m.body_text),m.to_text FROM messages m {joins}{where_sql} ORDER BY m.pinned DESC,m.date_ts DESC,m.id DESC LIMIT {}",lim+1)};
         let refs: Vec<&dyn rusqlite::ToSql> = values.iter().map(|v| v.as_ref()).collect();
         let mut st = c.prepare(&sql).map_err(|e| e.to_string())?;
         let rows = st
@@ -577,11 +552,7 @@ impl CoreStore {
             items.pop();
         }
         let next_cursor = if has_more {
-            if custom_sort {
-                Some(format!("o:{}", page_offset + lim))
-            } else {
-                items.last().map(|m| format!("{}:{}", m.date_ts, m.id))
-            }
+            if custom_sort {Some(format!("o:{}",page_offset+lim))} else {items.last().map(|m| format!("{}:{}", m.date_ts, m.id))}
         } else {
             None
         };

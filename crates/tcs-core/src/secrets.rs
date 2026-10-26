@@ -301,9 +301,6 @@ mod windows_credential_tests {
         let fetched = SecretStore::lookup_secret(&key).expect("read synthetic credential");
         assert_eq!(fetched, value, "secret storage roundtrip mismatch");
         SecretStore::clear_secret(&key).expect("delete synthetic credential");
-        assert!(
-            SecretStore::lookup_secret(&key).is_err(),
-            "credential survived delete"
-        );
+        assert!(SecretStore::lookup_secret(&key).is_err(), "credential survived delete");
     }
 }

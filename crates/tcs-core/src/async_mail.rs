@@ -296,9 +296,7 @@ where
 /// Derive account roles from a single LIST/LSUB snapshot. Explicit SPECIAL-USE
 /// attributes always beat a folder merely named Sent, including localized Gmail.
 /// Pure function: suitable for fixture tests and independent of the platform.
-pub fn special_folders_from_tree(
-    folders: &[crate::mail::FolderInfo],
-) -> crate::models::SpecialFolders {
+pub fn special_folders_from_tree(folders: &[crate::mail::FolderInfo]) -> crate::models::SpecialFolders {
     let mut roles = crate::models::SpecialFolders::default();
     for f in folders.iter().filter(|f| f.selectable) {
         match f.special_use.as_deref() {
@@ -480,10 +478,7 @@ pub async fn list_folder_tree(
         let display_name = delimiter
             .as_deref()
             .and_then(|d| (!d.is_empty()).then_some(d))
-            .and_then(|d| {
-                full.rsplit_once(d)
-                    .map(|(_, tail)| display_mailbox_name(tail))
-            })
+            .and_then(|d| full.rsplit_once(d).map(|(_, tail)| display_mailbox_name(tail)))
             .unwrap_or_else(|| display_mailbox_name(&full));
         folders.push(crate::mail::FolderInfo {
             name: full.clone(),
@@ -2944,34 +2939,24 @@ mod cached_uid_epoch_tests {
         let address = listener.local_addr().unwrap();
         let server = std::thread::spawn(move || {
             let (mut socket, _) = listener.accept().unwrap();
-            socket
-                .set_read_timeout(Some(Duration::from_secs(5)))
-                .unwrap();
+            socket.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
             let mut reader = BufReader::new(socket.try_clone().unwrap());
             socket.write_all(b"* OK fixture ready\r\n").unwrap();
             let tag = read_command(&mut reader, "LOGIN");
             write!(socket, "{tag} OK authenticated\r\n").unwrap();
             // Missing/zero local epoch fails before EXAMINE: client drops connection.
-            if expected == 0 {
-                return;
-            }
+            if expected == 0 { return; }
             let tag = read_command(&mut reader, "EXAMINE");
             if matches!(case, Case::MissingEpoch) {
                 write!(socket, "* 1 EXISTS\r\n{tag} OK [READ-ONLY] examined\r\n").unwrap();
             } else {
-                let epoch = if matches!(case, Case::DifferentEpoch) {
-                    72
-                } else {
-                    71
-                };
+                let epoch = if matches!(case, Case::DifferentEpoch) { 72 } else { 71 };
                 write!(socket, "* 1 EXISTS\r\n* OK [UIDVALIDITY {epoch}] valid\r\n{tag} OK [READ-ONLY] examined\r\n").unwrap();
             }
             if matches!(case, Case::DifferentEpoch | Case::MissingEpoch) {
                 // A request here would violate fail-closed identity enforcement.
                 let mut request = String::new();
-                socket
-                    .set_read_timeout(Some(Duration::from_millis(500)))
-                    .unwrap();
+                socket.set_read_timeout(Some(Duration::from_millis(500))).unwrap();
                 match reader.read_line(&mut request) {
                     Ok(0) | Err(_) => (),
                     Ok(_) => panic!("forbidden UID FETCH after epoch mismatch: {request}"),
@@ -2985,41 +2970,25 @@ mod cached_uid_epoch_tests {
             }
             // RFC822 content deliberately small and synthetic.
             let raw = "From: sender@example.invalid\r\nSubject: Sample\r\n\r\nhello";
-            let uid = if matches!(case, Case::WrongUid) {
-                99
-            } else {
-                42
-            };
+            let uid = if matches!(case, Case::WrongUid) { 99 } else { 42 };
             let row = if matches!(case, Case::MissingBody) {
                 format!("* 1 FETCH (UID {uid} FLAGS (\\Seen))\r\n")
             } else {
-                format!(
-                    "* 1 FETCH (UID {uid} BODY[] {{{}}}\r\n{raw})\r\n",
-                    raw.len()
-                )
+                format!("* 1 FETCH (UID {uid} BODY[] {{{}}}\r\n{raw})\r\n", raw.len())
             };
             socket.write_all(row.as_bytes()).unwrap();
-            if matches!(case, Case::Duplicate) {
-                socket.write_all(row.as_bytes()).unwrap();
-            }
+            if matches!(case, Case::Duplicate) { socket.write_all(row.as_bytes()).unwrap(); }
             write!(socket, "{tag} OK FETCH completed\r\n").unwrap();
         });
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap();
+        let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
         let outcome = rt.block_on(async {
             let stream = tokio::net::TcpStream::connect(address).await.unwrap();
             let mut client = async_imap::Client::new(stream);
             client.read_response().await.unwrap().unwrap();
             let mut session = client.login("test", "test").await.unwrap();
-            tokio::time::timeout(
-                Duration::from_secs(5),
-                read_raw_by_uid_if_epoch(&mut session, "INBOX", 42, expected),
-            )
-            .await
-            .unwrap()
-            .map_err(|e| e.to_string())
+            tokio::time::timeout(Duration::from_secs(5),
+                read_raw_by_uid_if_epoch(&mut session, "INBOX", 42, expected)
+            ).await.unwrap().map_err(|e| e.to_string())
         });
         server.join().unwrap();
         outcome
@@ -3027,24 +2996,12 @@ mod cached_uid_epoch_tests {
 
     #[test]
     fn raw_export_only_accepts_matching_uid_and_epoch() {
-        assert!(raw_fixture(Case::Valid, 71)
-            .unwrap()
-            .unwrap()
-            .ends_with(b"hello"));
-        for case in [
-            Case::DifferentEpoch,
-            Case::MissingEpoch,
-            Case::WrongUid,
-            Case::Duplicate,
-            Case::MissingBody,
-            Case::ServerFailure,
-        ] {
+        assert!(raw_fixture(Case::Valid, 71).unwrap().unwrap().ends_with(b"hello"));
+        for case in [Case::DifferentEpoch, Case::MissingEpoch, Case::WrongUid,
+                     Case::Duplicate, Case::MissingBody, Case::ServerFailure] {
             // An unrelated FETCH response might legitimately produce None, which
             // is also a fail-closed result and must not export another message.
-            assert!(
-                !matches!(raw_fixture(case, 71), Ok(Some(_))),
-                "unexpected acceptance: {case:?}"
-            );
+            assert!(!matches!(raw_fixture(case, 71), Ok(Some(_))), "unexpected acceptance: {case:?}");
         }
         assert!(raw_fixture(Case::Valid, 0).is_err());
     }
@@ -3055,43 +3012,29 @@ mod cached_uid_epoch_tests {
         let address = listener.local_addr().unwrap();
         let server = std::thread::spawn(move || {
             let (mut socket, _) = listener.accept().unwrap();
-            socket
-                .set_read_timeout(Some(Duration::from_secs(5)))
-                .unwrap();
+            socket.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
             let mut reader = BufReader::new(socket.try_clone().unwrap());
             socket.write_all(b"* OK fixture ready\r\n").unwrap();
             let tag = read_command(&mut reader, "LOGIN");
             write!(socket, "{tag} OK authenticated\r\n").unwrap();
             let tag = read_command(&mut reader, "EXAMINE");
-            write!(
-                socket,
-                "* OK [UIDVALIDITY 72] valid\r\n{tag} OK [READ-ONLY] examined\r\n"
-            )
-            .unwrap();
-            socket
-                .set_read_timeout(Some(Duration::from_millis(500)))
-                .unwrap();
+            write!(socket, "* OK [UIDVALIDITY 72] valid\r\n{tag} OK [READ-ONLY] examined\r\n").unwrap();
+            socket.set_read_timeout(Some(Duration::from_millis(500))).unwrap();
             let mut more = String::new();
             match reader.read_line(&mut more) {
                 Ok(0) | Err(_) => (),
                 Ok(_) => panic!("forbidden Reply-To UID FETCH: {more}"),
             }
         });
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap();
+        let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
         let result = rt.block_on(async {
             let stream = tokio::net::TcpStream::connect(address).await.unwrap();
             let mut client = async_imap::Client::new(stream);
             client.read_response().await.unwrap().unwrap();
             let mut session = client.login("test", "test").await.unwrap();
-            tokio::time::timeout(
-                Duration::from_secs(5),
-                fetch_reply_to_if_epoch(&mut session, "INBOX", 42, 71),
-            )
-            .await
-            .unwrap()
+            tokio::time::timeout(Duration::from_secs(5),
+                fetch_reply_to_if_epoch(&mut session, "INBOX", 42, 71)
+            ).await.unwrap()
         });
         assert!(result.is_err());
         server.join().unwrap();
@@ -3103,39 +3046,24 @@ mod tcs_special_folder_refresh_tests {
     use super::special_folders_from_tree;
     use crate::mail::FolderInfo;
     fn folder(name: &str, special: Option<&str>) -> FolderInfo {
-        FolderInfo {
-            name: name.into(),
-            display_name: name.into(),
-            parent: None,
-            delimiter: Some("/".into()),
-            selectable: true,
-            subscribed: true,
-            special_use: special.map(str::to_owned),
-        }
+        FolderInfo { name:name.into(), display_name:name.into(), parent:None,
+            delimiter:Some("/".into()), selectable:true,subscribed:true,
+            special_use:special.map(str::to_owned) }
     }
     #[test]
     fn gmail_sent_special_use_beats_generic_sent_folder() {
-        let fs = vec![
-            folder("Sent", None),
-            folder("[Gmail]/Sent Mail", Some("sent")),
-            folder("[Gmail]/All Mail", Some("all")),
-            folder("[Gmail]/Drafts", Some("drafts")),
-        ];
-        let roles = special_folders_from_tree(&fs);
-        assert_eq!(roles.sent.as_deref(), Some("[Gmail]/Sent Mail"));
-        assert_eq!(roles.archive.as_deref(), Some("[Gmail]/All Mail"));
-        assert_eq!(roles.drafts.as_deref(), Some("[Gmail]/Drafts"));
+        let fs = vec![folder("Sent",None), folder("[Gmail]/Sent Mail",Some("sent")),
+            folder("[Gmail]/All Mail",Some("all")), folder("[Gmail]/Drafts",Some("drafts"))];
+        let roles=special_folders_from_tree(&fs);
+        assert_eq!(roles.sent.as_deref(),Some("[Gmail]/Sent Mail"));
+        assert_eq!(roles.archive.as_deref(),Some("[Gmail]/All Mail"));
+        assert_eq!(roles.drafts.as_deref(),Some("[Gmail]/Drafts"));
     }
     #[test]
     fn unrecognized_role_is_not_guessed_and_noselect_is_ignored() {
-        let mut fs = vec![folder("Old Sent", None), folder("Sent", Some("sent"))];
-        fs[1].selectable = false;
+        let mut fs=vec![folder("Old Sent",None),folder("Sent",Some("sent"))];
+        fs[1].selectable=false;
         assert!(special_folders_from_tree(&fs).sent.is_none());
-        assert_eq!(
-            special_folders_from_tree(&[folder("Sent", None)])
-                .sent
-                .as_deref(),
-            Some("Sent")
-        );
+        assert_eq!(special_folders_from_tree(&[folder("Sent",None)]).sent.as_deref(),Some("Sent"));
     }
 }

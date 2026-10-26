@@ -105,6 +105,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          python scripts/quality/rc7-branding-gate.py
           python scripts/quality/tcsmail-package-guard.py --source
           python scripts/quality/test_utf8_ci_sources.py
           python scripts/quality/rc7-ui-and-packager.py

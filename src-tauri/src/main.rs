@@ -1,7 +1,4 @@
-#![cfg_attr(
-    all(target_os = "windows", not(debug_assertions)),
-    windows_subsystem = "windows"
-)]
+#![cfg_attr(all(target_os = "windows", not(debug_assertions)), windows_subsystem = "windows")]
 
 fn main() {
     // H5: suppress obsolete systemd invocations before any store/network I/O.

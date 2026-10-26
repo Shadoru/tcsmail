@@ -1,0 +1,19 @@
+{
+  "origin": "TCS_Mail_First_Run_REVISAO_2(1).zip / TCS-Mail-First-Run-R2/assets/logo",
+  "notice": "Supplied logo assets are raster-derived, not a genuine vector master",
+  "files": {
+    "frontend/assets/tcs-mail-logo.png": "81503e0284c932ded0144b29bde105026934374987d687dae692c368ea8944b7",
+    "src-tauri/icons/icon.ico": "afc29adfe29e68a2f97e9dd03d1f5583a15ba790d8fddd5c982c8e250296a004",
+    "src-tauri/icons/icon.icns": "edddbbe5f3578d3fefeb3437cc00a242510e59c96a5aa407871b9f8ffccfecba",
+    "src-tauri/icons/icon.png": "6f4a92decc7dbd316e53984b7fba2795844814e799c4dd6982d4716a0ec31130",
+    "src-tauri/icons/128x128@2x.png": "81503e0284c932ded0144b29bde105026934374987d687dae692c368ea8944b7",
+    "src-tauri/icons/32x32.png": "85258d21540ce984636be81e47e62a1a25a6bf8c2c3682f7d9c796018a46b220",
+    "src-tauri/icons/128x128.png": "6b4a588fb1e907bb0aa3e464769061844a110a6f9aed04d5c22a4e9df1863b9b",
+    "src-tauri/icons/256x256.png": "81503e0284c932ded0144b29bde105026934374987d687dae692c368ea8944b7",
+    "src-tauri/icons/512x512.png": "6f4a92decc7dbd316e53984b7fba2795844814e799c4dd6982d4716a0ec31130",
+    "src-tauri/resources/packaging-icons/tcs-mail-32.png": "85258d21540ce984636be81e47e62a1a25a6bf8c2c3682f7d9c796018a46b220",
+    "src-tauri/resources/packaging-icons/tcs-mail-128.png": "6b4a588fb1e907bb0aa3e464769061844a110a6f9aed04d5c22a4e9df1863b9b",
+    "src-tauri/resources/packaging-icons/tcs-mail-256.png": "81503e0284c932ded0144b29bde105026934374987d687dae692c368ea8944b7",
+    "src-tauri/resources/packaging-icons/tcs-mail-512.png": "6f4a92decc7dbd316e53984b7fba2795844814e799c4dd6982d4716a0ec31130"
+  }
+}
