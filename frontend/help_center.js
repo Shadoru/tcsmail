@@ -4,6 +4,15 @@ import {esc} from './lib.js';
 import {getLocale} from './i18n.js';
 export const GUIDES = {
  "pt-BR": [
+  ["Primeiros passos","Configurar na primeira abertura","Conecte contas e selecione preferências em duas etapas na mesma janela.",[
+    "Informe apenas seu e-mail e utilize a descoberta automática para Gmail, Microsoft ou IMAP/SMTP.",
+    "Autorize OAuth no navegador quando for solicitado; nunca informe senha básica como substituto para OAuth obrigatório.",
+    "Adicione contas sucessivas e avance para Preferências somente quando houver uma conta conectada.",
+    "Escolha tema, notificações e compositor integrado ou em janela independente; os padrões são notificações ativas e compositor integrado.",
+    "Clique Concluir para salvar as preferências e abrir a caixa de entrada.",
+    "Ao voltar à etapa Contas, as preferências ainda não salvas são preservadas; a conclusão exige uma conta persistida.",
+    "A importação automática de backup não está disponível nesta candidata: mantenha os arquivos e credenciais intactos."
+   ],"Se quiser restaurar um perfil antigo, preserve seus dados e solicite o procedimento de restauração segura; não substitua o banco aberto."],
   [
    "Primeiros passos",
    "Adicionar uma conta de e-mail",
@@ -535,6 +544,15 @@ export const GUIDES = {
   ]
  ],
  "en-US": [
+  ["Getting started","Set up on first launch","Connect accounts and choose preferences in two steps in the same window.",[
+    "Enter just your email address and use autodiscovery for Gmail, Microsoft or IMAP/SMTP.",
+    "Authorize OAuth in your browser when requested; never replace mandatory OAuth with a basic password.",
+    "Add accounts consecutively and proceed to Preferences only when at least one account is connected.",
+    "Choose theme, notifications and in-panel or separate-window composer; defaults are enabled notifications and in-panel composer.",
+    "Select Finish to save preferences and open your inbox.",
+    "Going back to Accounts preserves unsaved preferences; finishing requires a saved account.",
+    "Automatic backup import is not available in this candidate: keep profile files and credentials untouched."
+   ],"To restore an old profile, preserve your data and follow a safe restoration procedure; never replace an open database."],
   [
    "Getting started",
    "Add an email account",

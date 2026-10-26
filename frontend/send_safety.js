@@ -17,3 +17,10 @@ export function inspectMessageSafety({text='',html='',attachmentCount=0,recipien
  // Avoid parsing or fetching remote URLs: no DNS, HEAD, GET, reputation API or token leaks.
  return {invalidRecipients,externalRecipients,missingAttachment,domainHints,suspiciousLinks};
 }
+
+// Pure scheduling validation shared by normal and independent composers. No implicit immediate sends.
+export function validateOutgoingTimes({scheduleEnabled=false,sendAt=null,followEnabled=false,followAt=null,nowSeconds=Math.floor(Date.now()/1000)}={}){
+ if(scheduleEnabled&&(!Number.isFinite(sendAt)||sendAt<=nowSeconds))return 'Escolha uma data e horário futuros para o envio agendado.';
+ if(followEnabled&&(!Number.isFinite(followAt)||followAt<=nowSeconds))return 'Escolha data e horário futuros para o follow-up.';
+ return null;
+}

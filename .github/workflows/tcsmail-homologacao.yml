@@ -1,4 +1,4 @@
-name: TCS Mail RC6 - Homologacao e instaladores
+name: TCS Mail RC7 - Homologacao e instaladores
 
 on:
   workflow_dispatch:
@@ -24,7 +24,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: tcsmail-rc6-${{ github.ref }}
+  group: tcsmail-rc7-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -101,23 +101,26 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: tcsmail-${{ matrix.rust_target }}
-      - name: Contrato RC6 e sintaxe dos scripts
+      - name: Contrato RC7 e sintaxe dos scripts
         shell: bash
         run: |
           set -euo pipefail
           python scripts/quality/tcsmail-package-guard.py --source
           python scripts/quality/test_utf8_ci_sources.py
-          python scripts/quality/rc6-ui-and-packager.py
-          node scripts/quality/rc6-folder-move.test.mjs
-          python scripts/quality/rc6-providers-and-release.py
+          python scripts/quality/rc7-ui-and-packager.py
+          python scripts/quality/rc7-clean-release-contract.py
+          python scripts/quality/test_frontend_module_syntax.py
+          node scripts/quality/rc7-folder-move.test.mjs
+          node scripts/quality/rc7-first-run-regression.mjs
+          python scripts/quality/rc7-providers-and-release.py
           python scripts/quality/test_tcsmail_package_guard.py
           node scripts/verify-ms-oauth.mjs
           node scripts/quality/rc2-release-contract.mjs
           node scripts/quality/rc2-interface-regression.mjs
           node scripts/quality/rc2-native-composer-behavior.mjs
-          node scripts/quality/rc6-composer-routing.mjs
-          node scripts/quality/rc6-provider-sync-contract.mjs
-          python scripts/quality/rc6_crossplatform_regression.py
+          node scripts/quality/rc7-composer-routing.mjs
+          node scripts/quality/rc7-provider-sync-contract.mjs
+          python scripts/quality/rc7_crossplatform_regression.py
           python scripts/quality/rc2-presentation-verify.py --source
           python - <<'PY'
           import pathlib, subprocess
@@ -141,12 +144,12 @@ jobs:
         run: |
           set -euo pipefail
           if [[ '${{ matrix.kind }}' == 'linux' ]]; then
-            # DEB mantém a versão SemVer original da RC6.
+            # DEB mantém a versão SemVer original da RC7.
             cargo tauri build --target '${{ matrix.rust_target }}' --bundles deb
             # RPM exige Version sem hífen. Release pré-estável ordena antes de 0.8.2-1.
             # JSON Merge Patch é aplicado somente a esta invocação Tauri.
             cargo tauri build --target '${{ matrix.rust_target }}' --bundles rpm \
-              --config '{"version":"0.8.2","bundle":{"linux":{"rpm":{"release":"0.rc6.1"}}}}'
+              --config '{"version":"0.8.2","bundle":{"linux":{"rpm":{"release":"0.rc7.1"}}}}'
           else
             cargo tauri build --target '${{ matrix.rust_target }}' --bundles '${{ matrix.bundles }}'
           fi
@@ -158,7 +161,7 @@ jobs:
       - name: Enviar artefatos privados (sem Release)
         uses: actions/upload-artifact@v7
         with:
-          name: tcsmail-0.8.2-rc6-${{ matrix.label }}-${{ github.run_number }}
+          name: tcsmail-0.8.2-rc7-${{ matrix.label }}-${{ github.run_number }}
           path: delivery/${{ matrix.label }}/*
           if-no-files-found: error
           retention-days: 14
@@ -172,7 +175,7 @@ jobs:
         shell: bash
         run: |
           {
-            echo '## TCS Mail 0.8.2-rc6 — Resultado'
+            echo '## TCS Mail 0.8.2-rc7 — Resultado'
             echo ''
             echo "- Commit: \`${GITHUB_SHA}\`"
             echo "- Execução: \`${GITHUB_RUN_ID}\`"

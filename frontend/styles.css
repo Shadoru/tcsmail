@@ -886,3 +886,28 @@ html[data-theme="dark"] .sendOptionsPopover .selectButton{background:#242a30!imp
 .navItem.mailDropTarget{outline:2px dashed var(--accent)!important;outline-offset:-2px;background:color-mix(in srgb,var(--accent) 24%,var(--surface))!important}
 .mailList .row[draggable="true"]{cursor:grab}
 .mailList .row[draggable="true"]:active{cursor:grabbing}
+
+/* RC7: first-run inside the application window. */
+.firstRun{min-height:100vh;overflow:auto;display:grid;place-items:center;padding:24px;background:var(--bg,#171b20);color:var(--text,#eef2f7)}
+.firstRunCard{width:min(850px,100%);max-height:calc(100vh - 48px);overflow:auto;border:1px solid var(--border,#444);border-radius:18px;background:var(--surface,#21272e);padding:clamp(18px,3vw,34px);box-shadow:0 16px 48px #0003}
+.firstRunCard>header{display:flex;gap:16px;align-items:center}.firstRunCard h1{font-size:1.65rem;margin:0}.firstRunCard h2{font-size:1.24rem}.firstRunSteps{display:flex;gap:18px;padding:12px 0;border-bottom:1px solid var(--border,#555);margin-bottom:18px}.firstRunSteps .active{font-weight:750;text-decoration:underline}
+.firstRunCard label{display:block;margin:10px 0 5px;font-weight:600}.firstRunCard input:not([type=checkbox]),.firstRunCard select{width:100%;min-width:0;padding:10px;border-radius:8px;background:var(--surface-strong,#303842);color:var(--text,#fff);border:1px solid var(--border,#555)}
+.firstRunInline{display:flex;gap:10px}.firstRunInline input{flex:1}.firstRunCard button{padding:10px 16px;border-radius:8px;border:1px solid var(--border,#666);cursor:pointer}.firstRunCard button:disabled{opacity:.45;cursor:not-allowed}.firstRunCard details{border-top:1px solid var(--border,#555);padding:15px 0}.firstRunCard details summary{cursor:pointer}.firstRunGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 14px}.firstRunCard fieldset{border:1px solid var(--border,#666);margin-top:18px}.firstRunCard fieldset label{font-weight:normal}.firstRunCard footer{display:flex;gap:12px;justify-content:flex-end;padding-top:18px}.firstRunCard [data-error="1"]{color:#ff9292}.firstRunCard #firstRunStatus{min-height:1.4em}.firstRunCard ul{overflow-wrap:anywhere}@media(max-width:600px){.firstRunInline{flex-direction:column}.firstRunGrid{grid-template-columns:1fr}}
+
+/* RC7 First Run — six appearance previews match the canonical sidebar/list theme tokens. */
+.firstRunBenefits{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:18px 0}
+.firstRunBenefit{border:1px solid var(--border);border-radius:12px;padding:12px;background:var(--surface-strong)}
+.firstRunBenefit strong{display:block;font-size:.92rem}.firstRunBenefit p{margin:7px 0 0;line-height:1.35;font-size:.85rem;color:var(--muted)}
+.firstRunThemeGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:12px 0 16px}
+.firstRunCard .firstRunThemeCard{display:flex;flex-direction:column;align-items:stretch;gap:6px;background:var(--surface);color:var(--text);text-align:center;border:1px solid var(--border);min-width:0;padding:8px}
+.firstRunCard .firstRunThemeCard[aria-pressed="true"]{outline:2px solid var(--accent);outline-offset:1px}
+.firstRunCard .firstRunThemeCard:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.firstRunThemePreview{height:46px;display:grid;grid-template-columns:33% 30% 37%;border-radius:6px;overflow:hidden;border:1px solid rgba(125,125,125,.35);--preview-side:#e4e8ed;--preview-list:#f4f6f8;--preview-reader:#ffffff}
+.firstRunThemePreview i{background:var(--preview-side)}.firstRunThemePreview b{background:var(--preview-list)}.firstRunThemePreview em{background:var(--preview-reader)}
+.firstRunThemePreview[data-preview-theme="light"]{--preview-side:#e4e8ed;--preview-list:#f4f6f8;--preview-reader:#ffffff}
+.firstRunThemePreview[data-preview-theme="dark"]{--preview-side:#1d2125;--preview-list:#181c20;--preview-reader:#15181b}
+.firstRunThemePreview[data-preview-theme="focus"]{--preview-side:#17243b;--preview-list:#f2f5f9;--preview-reader:#ffffff}
+.firstRunThemePreview[data-preview-theme="ocean"]{--preview-side:#083c5a;--preview-list:#eaf5fa;--preview-reader:#ffffff}
+.firstRunThemePreview[data-preview-theme="graphite"]{--preview-side:#293039;--preview-list:#eef0f2;--preview-reader:#ffffff}
+@media(prefers-color-scheme:dark){.firstRunThemePreview[data-preview-theme="system"]{--preview-side:#1d2125;--preview-list:#181c20;--preview-reader:#15181b}}
+@media(max-width:680px){.firstRunBenefits{grid-template-columns:1fr}.firstRunThemeGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}

@@ -1,6 +1,6 @@
 [package]
 name = "tcs-mail"
-version = "0.8.2-rc6"
+version = "0.8.2-rc7"
 edition = "2021"
 rust-version = "1.89"
 license = "MPL-2.0"

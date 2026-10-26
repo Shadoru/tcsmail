@@ -1,1 +1,0 @@
-TCS Mail 0.8.2-h3-tabs-fix: correct embedded modal layout, protect drafts on reader updates, short tab focus mode, remove workspace shelf. Same Rust/IMAP backend as h3-tabs. Verify by compiling and GUI testing.

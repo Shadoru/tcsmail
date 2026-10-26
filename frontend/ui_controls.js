@@ -1,4 +1,5 @@
 
+const openSelectShells = new Set();
 function escHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 
 function enhanceSelect(select){
@@ -29,8 +30,8 @@ function enhanceSelect(select){
    Object.assign(popup.style,{left:`${Math.max(8,Math.min(rect.left,innerWidth-width-8))}px`,width:`${width}px`,maxHeight:`${maxHeight}px`,top:above?'auto':`${rect.bottom+gap}px`,bottom:above?`${innerHeight-rect.top+gap}px`:'auto'});
  };
  const onScroll=()=>{if(!shell.isConnected)close();else place()};
- const close=()=>{popup.classList.add('hidden');popup.classList.remove('tcsFloatingPopup');button.setAttribute('aria-expanded','false');window.removeEventListener('resize',onScroll);window.removeEventListener('scroll',onScroll,true);if(shell.isConnected)shell.append(popup);else popup.remove()};
- const open=()=>{refresh();document.body.append(popup);popup.classList.add('tcsFloatingPopup');popup.classList.remove('hidden');button.setAttribute('aria-expanded','true');place();window.addEventListener('resize',onScroll);window.addEventListener('scroll',onScroll,true);popup.querySelector(`[data-select-i="${active}"]`)?.scrollIntoView({block:'nearest'})};
+ const close=()=>{openSelectShells.delete(shell);popup.classList.add('hidden');popup.classList.remove('tcsFloatingPopup');button.setAttribute('aria-expanded','false');window.removeEventListener('resize',onScroll);window.removeEventListener('scroll',onScroll,true);if(shell.isConnected)shell.append(popup);else popup.remove()};
+ const open=()=>{refresh();openSelectShells.add(shell);document.body.append(popup);popup.classList.add('tcsFloatingPopup');popup.classList.remove('hidden');button.setAttribute('aria-expanded','true');place();window.addEventListener('resize',onScroll);window.addEventListener('scroll',onScroll,true);popup.querySelector(`[data-select-i="${active}"]`)?.scrollIntoView({block:'nearest'})};
  const choose=i=>{const opts=enabledOptions(),opt=opts[i];if(!opt)return;select.value=opt.value;select.dispatchEvent(new Event('change',{bubbles:true}));refresh();close();button.focus()};
  button.onclick=()=>popup.classList.contains('hidden')?open():close();
  button.onkeydown=e=>{
@@ -44,7 +45,9 @@ function enhanceSelect(select){
  popup.onclick=e=>{const item=e.target.closest('[data-select-i]');if(!item)return;e.preventDefault();e.stopPropagation();choose(Number(item.dataset.selectI))};
  select.addEventListener('change',refresh);
  select.addEventListener('tcs-select-refresh',refresh);
- document.addEventListener('pointerdown',e=>{if(!shell.contains(e.target)&&!popup.contains(e.target))close()});
+ shell.__tcsSelectPopup=popup;shell.__tcsSelectClose=close;
+ const attributeObserver=new MutationObserver(()=>refresh());
+ attributeObserver.observe(select,{attributes:true,childList:true,subtree:true,characterData:true});
  refresh()
 }
 
@@ -52,6 +55,7 @@ export function enhanceSelects(root=document){
  root.querySelectorAll?.('select:not([data-native-select])').forEach(enhanceSelect)
 }
 export function installControlEnhancer(){
+ document.addEventListener('pointerdown',e=>{for(const shell of [...openSelectShells]){const popup=shell.__tcsSelectPopup;if(!shell.isConnected||(!shell.contains(e.target)&&!popup?.contains(e.target)))shell.__tcsSelectClose?.()}});
  enhanceSelects(document);
  const observer=new MutationObserver(records=>{
    for(const record of records)for(const node of record.addedNodes){

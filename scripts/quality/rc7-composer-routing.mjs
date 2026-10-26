@@ -8,4 +8,4 @@ assert.match(main,/return openInlineComposer\(seed\)/);
 assert.match(main,/await openNativeComposer\(ctx,seed\)/);
 assert.match(main,/async function openResponseComposer\(seed\)\{\s*return openComposer\(ctx,seed\)/);
 assert.doesNotMatch(main,/replySurfacePreference/);
-console.log('PASS: RC6 composer reads persisted setting at activation, inline and native both reachable');
+console.log('PASS: RC7 composer reads persisted setting at activation, inline and native both reachable');

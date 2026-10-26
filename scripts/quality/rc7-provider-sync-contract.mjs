@@ -18,4 +18,4 @@ assert.match(mail,/name: full\.clone\(\)/);
 assert.match(mail,/display_name,/);
 assert.match(css,/html\[data-theme="dark"\] \.selectShell/);
 assert.match(css,/html\[data-theme="system"\] \.selectShell/);
-console.log('PASS: RC6 provider-neutral first-page, maintenance dedup, raw IMAP keys, dark selectors');
+console.log('PASS: RC7 provider-neutral first-page, maintenance dedup, raw IMAP keys, dark selectors');

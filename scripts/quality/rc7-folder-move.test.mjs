@@ -29,4 +29,4 @@ assert.match(validateMoveSelection([{id:42,account_id:1},{id:43,account_id:2}],'
 assert.match(validateMoveSelection([{id:42,account_id:1,local_draft:true}],'INBOX',choices),/servidor/);
 assert.match(validateMoveSelection(one,'INBOX',choices,{sourceFolder:'INBOX'}),/já estão/);
 assert.equal(choices.find(x=>x.label==='Work / 00 - Segurança')?.value, 'Work/00 - Seguran&AOc-a');
-console.log('PASS: RC6 IMAP raw IDs/display, nested folders, move restrictions, Gmail/MS/generic-compatible');
+console.log('PASS: RC7 IMAP raw IDs/display, nested folders, move restrictions, Gmail/MS/generic-compatible');

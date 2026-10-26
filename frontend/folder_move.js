@@ -34,7 +34,7 @@ export function moveFolderChoices(tree) {
   return [...unique.values()].sort((a,b)=>a.label.localeCompare(b.label,undefined,{numeric:true,sensitivity:'base'}));
 }
 export function validateMoveSelection(rows, target, choices, {sourceFolder=null}={}) {
-  if (!rows.length || rows.some(m=>!m || m.local_draft || !Number.isSafeInteger(Number(m.id))))
+  if (!rows.length || rows.some(m=>!m || m.local_draft || !Number.isSafeInteger(Number(m.id)) || Number(m.id)<=0))
     return 'Selecione mensagens do servidor para mover.';
   if (new Set(rows.map(m=>m.account_id)).size!==1)
     return 'Só é possível mover mensagens da mesma conta.';

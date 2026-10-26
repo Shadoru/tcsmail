@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""RC6 source regression gate for inbox move, context menu, popup, help and packagers.
+"""RC7 source regression gate for inbox move, context menu, popup, help and packagers.
 Not a substitute for OS-native builds or live IMAP tests.
 """
 import json
@@ -8,9 +8,9 @@ from pathlib import Path
 r=Path(__file__).resolve().parents[2]
 read=lambda p:(r/p).read_text(encoding='utf-8')
 a=json.loads(read('src-tauri/tauri.conf.json'))
-assert a['version']=='0.8.2-rc6'
+assert a['version']=='0.8.2-rc7'
 assert a['identifier']=='com.thecreativesolver.TCSMail'
-assert a['bundle']['windows']['wix']['version']=='0.8.206'
+assert a['bundle']['windows']['wix']['version']=='0.8.207'
 main=read('frontend/main.js')
 controls=read('frontend/ui_controls.js')
 css=read('frontend/styles.css')
@@ -30,7 +30,7 @@ assert "menu.style.maxHeight='min(70vh, 560px)'" in main
 assert "button.addEventListener('drop',async event=>" in main
 assert "confirmDialog(action==='delete_permanent'" in main
 assert 'tcsFloatingPopup' in controls and 'document.body.append(popup)' in controls
-assert "!popup.contains(e.target)" in controls
+assert 'openSelectShells' in controls
 assert '.selectPopup.tcsFloatingPopup' in css and '.contextMenu{max-height:' in css
 assert 'decodeMailboxLabel' in folders and 'selectable!==false' in folders
 for lang in ('pt-BR','en-US'):
@@ -40,7 +40,7 @@ for needle in ('Mover mensagens entre pastas','Move messages between folders','L
 assert "'Destino':'Destination'" in i18n
 for variant in ('linux-x64','windows-x64','macos-intel','macos-arm64'):
  assert variant in workflow
-assert '0.rc6.1' in workflow
-for test in ('rc6-folder-move.test.mjs','rc6-ui-and-packager.py','test_utf8_ci_sources.py'):
+assert '0.rc7.1' in workflow
+for test in ('rc7-folder-move.test.mjs','rc7-ui-and-packager.py','test_utf8_ci_sources.py'):
  assert test in workflow,test
-print('PASS: RC6 UI/move/help/translation, version/packagers, all-OS release gates')
+print('PASS: RC7 UI/move/help/translation, version/packagers, all-OS release gates')
