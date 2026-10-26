@@ -15,7 +15,8 @@ use url::Url;
 // Microsoft desktop public-client application ID from the supplied Entra registration.
 // This is intentionally public; NEVER ship a client_secret with the executable.
 pub const MICROSOFT_CLIENT_ID: &str = "3ee22a21-a93b-458c-8602-dd8e2ddb65e9";
-pub const MICROSOFT_AUTHORIZE: &str = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize";
+pub const MICROSOFT_AUTHORIZE: &str =
+    "https://login.microsoftonline.com/common/oauth2/v2.0/authorize";
 pub const MICROSOFT_TOKEN: &str = "https://login.microsoftonline.com/common/oauth2/v2.0/token";
 // This client uses existing IMAP/SMTP transport, not Microsoft Graph.
 // Microsoft Graph Mail.ReadWrite/Mail.Send grants are a DIFFERENT token resource.
@@ -602,7 +603,10 @@ pub fn exchange_microsoft_code(
 
 pub fn verify_microsoft_scopes(scopes: &str) -> Result<(), String> {
     for expected in [MICROSOFT_IMAP_SCOPE, MICROSOFT_SMTP_SCOPE] {
-        if !scopes.split_whitespace().any(|v| v.eq_ignore_ascii_case(expected)) {
+        if !scopes
+            .split_whitespace()
+            .any(|v| v.eq_ignore_ascii_case(expected))
+        {
             return Err(format!("Permissão Microsoft não concedida: {expected}. No Entra, adicione as permissões delegadas Office 365 Exchange Online IMAP.AccessAsUser.All e SMTP.Send; tokens do Microsoft Graph não servem para IMAP/SMTP."));
         }
     }
@@ -610,7 +614,10 @@ pub fn verify_microsoft_scopes(scopes: &str) -> Result<(), String> {
 }
 
 fn microsoft_secret_key(email: &str) -> String {
-    format!("oauth:microsoft:outlook:{}", email.trim().to_ascii_lowercase())
+    format!(
+        "oauth:microsoft:outlook:{}",
+        email.trim().to_ascii_lowercase()
+    )
 }
 
 pub fn store_microsoft_tokens(email: &str, tokens: &MicrosoftTokenSet) -> Result<(), String> {
@@ -618,7 +625,8 @@ pub fn store_microsoft_tokens(email: &str, tokens: &MicrosoftTokenSet) -> Result
     SecretStore::store_secret(&microsoft_secret_key(email), &value).map_err(|e| e.to_string())
 }
 pub fn load_microsoft_tokens(email: &str) -> Result<MicrosoftTokenSet, String> {
-    let raw = SecretStore::lookup_secret(&microsoft_secret_key(email)).map_err(|e| e.to_string())?;
+    let raw =
+        SecretStore::lookup_secret(&microsoft_secret_key(email)).map_err(|e| e.to_string())?;
     serde_json::from_str(&raw).map_err(|e| format!("Token Microsoft armazenado inválido: {e}"))
 }
 pub fn clear_microsoft_tokens(email: &str) -> Result<(), String> {
@@ -653,7 +661,10 @@ pub fn valid_microsoft_access_token(email: &str) -> Result<String, String> {
     let status = response.status();
     let body = response.text().map_err(|e| e.to_string())?;
     if !status.is_success() {
-        return Err(format!("{}. Reconecte a conta se a permissão foi revogada.", microsoft_token_error(status, &body)));
+        return Err(format!(
+            "{}. Reconecte a conta se a permissão foi revogada.",
+            microsoft_token_error(status, &body)
+        ));
     }
     let token: TokenResponse = serde_json::from_str(&body)
         .map_err(|e| format!("Resposta de renovação Microsoft inválida: {e}"))?;
@@ -663,7 +674,9 @@ pub fn valid_microsoft_access_token(email: &str) -> Result<String, String> {
     }
     let refreshed = MicrosoftTokenSet {
         access_token: token.access_token,
-        refresh_token: token.refresh_token.filter(|x| !x.is_empty())
+        refresh_token: token
+            .refresh_token
+            .filter(|x| !x.is_empty())
             .unwrap_or(latest.refresh_token),
         expires_at: Utc::now().timestamp() + token.expires_in.max(60),
         refresh_token_expires_at: None,
@@ -677,20 +690,38 @@ pub fn valid_microsoft_access_token(email: &str) -> Result<String, String> {
 
 pub fn microsoft_oauth_status(account: &Account) -> OAuthStatus {
     if !account.auth_method.eq_ignore_ascii_case("oauth2")
-        || !account.oauth_provider.eq_ignore_ascii_case("microsoft") {
-        return OAuthStatus { connected: false, provider: String::new(), expires_at: None,
-            refresh_token_expires_at: None, needs_reconnect: false,
-            detail: "Conta não utiliza OAuth Microsoft".into() };
+        || !account.oauth_provider.eq_ignore_ascii_case("microsoft")
+    {
+        return OAuthStatus {
+            connected: false,
+            provider: String::new(),
+            expires_at: None,
+            refresh_token_expires_at: None,
+            needs_reconnect: false,
+            detail: "Conta não utiliza OAuth Microsoft".into(),
+        };
     }
     match load_microsoft_tokens(&account.email) {
-        Ok(t) => OAuthStatus { connected: !t.refresh_token.is_empty(),
-            provider: "microsoft".into(), expires_at: Some(t.expires_at),
-            refresh_token_expires_at: None, needs_reconnect: t.refresh_token.is_empty(),
-            detail: if t.refresh_token.is_empty() { "Reconecte a conta Microsoft".into() }
-                else { "Microsoft OAuth (IMAP/SMTP)".into() } },
-        Err(_) => OAuthStatus { connected: false, provider: "microsoft".into(),
-            expires_at: None, refresh_token_expires_at: None, needs_reconnect: true,
-            detail: "Credenciais Microsoft ausentes; reconecte".into() },
+        Ok(t) => OAuthStatus {
+            connected: !t.refresh_token.is_empty(),
+            provider: "microsoft".into(),
+            expires_at: Some(t.expires_at),
+            refresh_token_expires_at: None,
+            needs_reconnect: t.refresh_token.is_empty(),
+            detail: if t.refresh_token.is_empty() {
+                "Reconecte a conta Microsoft".into()
+            } else {
+                "Microsoft OAuth (IMAP/SMTP)".into()
+            },
+        },
+        Err(_) => OAuthStatus {
+            connected: false,
+            provider: "microsoft".into(),
+            expires_at: None,
+            refresh_token_expires_at: None,
+            needs_reconnect: true,
+            detail: "Credenciais Microsoft ausentes; reconecte".into(),
+        },
     }
 }
 
@@ -699,13 +730,26 @@ mod microsoft_oauth_tests {
     use super::*;
     #[test]
     fn microsoft_authorization_uses_public_pkce_and_outlook_resource() {
-        let a = build_microsoft_authorization("http://localhost:37897", Some("user@outlook.com")).unwrap();
+        let a = build_microsoft_authorization("http://localhost:37897", Some("user@outlook.com"))
+            .unwrap();
         let u = Url::parse(&a.authorization_url).unwrap();
         let p: std::collections::HashMap<_, _> = u.query_pairs().into_owned().collect();
-        assert_eq!(p.get("client_id").map(String::as_str), Some(MICROSOFT_CLIENT_ID));
-        assert_eq!(p.get("code_challenge_method").map(String::as_str), Some("S256"));
-        assert_eq!(p.get("code_challenge"), Some(&pkce_challenge(&a.code_verifier)));
-        assert_eq!(p.get("redirect_uri").map(String::as_str), Some("http://localhost:37897"));
+        assert_eq!(
+            p.get("client_id").map(String::as_str),
+            Some(MICROSOFT_CLIENT_ID)
+        );
+        assert_eq!(
+            p.get("code_challenge_method").map(String::as_str),
+            Some("S256")
+        );
+        assert_eq!(
+            p.get("code_challenge"),
+            Some(&pkce_challenge(&a.code_verifier))
+        );
+        assert_eq!(
+            p.get("redirect_uri").map(String::as_str),
+            Some("http://localhost:37897")
+        );
         assert!(!p.contains_key("client_secret"));
         assert!(p["scope"].contains(MICROSOFT_IMAP_SCOPE));
         assert!(!p["scope"].contains("graph.microsoft.com"));
@@ -718,7 +762,10 @@ mod microsoft_oauth_tests {
     }
     #[test]
     fn google_and_microsoft_secrets_are_disjoint() {
-        assert_ne!(google_secret_key("a@outlook.com"), microsoft_secret_key("a@outlook.com"));
+        assert_ne!(
+            google_secret_key("a@outlook.com"),
+            microsoft_secret_key("a@outlook.com")
+        );
     }
 }
 
