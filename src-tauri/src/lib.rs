@@ -2791,7 +2791,14 @@ fn microsoft_oauth_connect_blocking(
             tcs_core::async_mail::login_secure(&account, &tokens.access_token),
         )
         .await.map_err(|_| "O servidor Microsoft IMAP não respondeu em 35 segundos".to_string())?
-        .map_err(|e| format!("Microsoft autenticou, mas o servidor IMAP recusou a caixa {email}: {e}. Verifique acesso IMAP e consentimento Exchange Online."))?;
+        .map_err(|e| {
+            let detail = e.to_string();
+            if detail.contains("IMAP TCP connection timed out") {
+                format!("A autorização Microsoft foi concluída, mas a conexão TCP com {}:{} expirou. Verifique conectividade, firewall, proxy e a liberação da porta IMAP 993. No Outlook.com, confirme que o acesso IMAP está habilitado em Configurações > Email > Encaminhamento e IMAP. Nenhuma conta foi gravada. Detalhes: {detail}", account.imap_host, account.imap_port)
+            } else {
+                format!("Microsoft autorizou, mas a verificação IMAP da caixa {email} falhou: {detail}. Confirme o acesso IMAP, o consentimento e as políticas do Exchange Online. Nenhuma conta foi gravada.")
+            }
+        })?;
         let _ = tokio::time::timeout(std::time::Duration::from_secs(8), session.logout()).await;
         Ok::<(), String>(())
     })?;

@@ -43,3 +43,6 @@ homologação funcional**.
 - Workflow adicional IMAP: `.github/workflows/imap-cross-platform.yml`
 
 Não enviar segredos, mensagens pessoais, bancos de e-mail ou caches ao repositório.
+
+## Microsoft OAuth e IMAP (RC7)
+Após aprovar a autorização no navegador, o aplicativo testa a conexão IMAP TLS com `outlook.office365.com:993`. Caso ocorra timeout TCP, verifique firewall/proxy e se o IMAP está habilitado no Outlook.com (Configurações > Email > Encaminhamento e IMAP). Autorização OAuth bem-sucedida não comprova conectividade de rede. O aplicativo não grava uma nova conta quando esse teste falha.

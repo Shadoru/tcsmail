@@ -114,3 +114,9 @@ Falha recorrente deve gerar: (a) teste de regressão que falha antes da correç�
 - Toda mudança nos tokens de cor deve atualizar as prévias dos seis temas e seus testes; não anunciar paletas ilustrativas como cores do aplicativo.
 - Não alegar que PNG/ICO/ICNS foram atualizados sem comparar os hashes da release anterior com a arte oficial aprovada.
 - Nenhum assistente pode indicar restauração completa se faltar transação/rollback; não criar importação improvisada de bancos ou credenciais.
+
+
+## RC7: controles de dependências e rede
+- Verificadores executados no CI devem usar a biblioteca padrão Python, ou instalar dependências de modo explícito antes de executá-los em todos os runners.
+- Timeout TCP não é recusa de credenciais; não criar conta antes de autenticar IMAP com êxito. Não contornar firewall, certificado ou política de segurança.
+- Fluxo OAuth deve exibir indicação de espera e erros acionáveis de rede. Testar Linux, Windows, macOS Intel e ARM64.
