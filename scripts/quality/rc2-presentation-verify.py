@@ -43,7 +43,7 @@ def metadata_check(xml):
     require(root.find("summary[@{http://www.w3.org/XML/1998/namespace}lang='pt-BR']") is not None,'PT-BR summary missing')
     require(len(root.findall('./description/p'))>=4,'Localized full descriptions missing')
     require(root.findtext("url[@type='homepage']")=='https://thecreativesolver.com/mail','Homepage mismatch')
-    require(root.find("releases/release[@version='0.8.2-rc7']") is not None,'Version metadata mismatch')
+    require(root.find("releases/release[@version='0.8.2-rc8']") is not None,'Version metadata mismatch')
 
 def desktop_check(txt,hidden=False):
     require('[Desktop Entry]' in txt,'Desktop entry missing')
@@ -58,7 +58,7 @@ def desktop_check(txt,hidden=False):
 
 def check_source():
     cfg=json.loads(CONF.read_text(encoding="utf-8"))
-    require(cfg['version']=='0.8.2-rc7','Wrong version')
+    require(cfg['version']=='0.8.2-rc8','Wrong version')
     require(cfg['identifier']==IDENT,'Tauri ID changed (risk to existing user data)')
     require('multiplataforma' in cfg['bundle']['shortDescription'].lower(),'Localized tagline missing')
     require('Linux, Windows e macOS' in cfg['bundle']['longDescription'],'Cross-platform description missing')
@@ -84,7 +84,7 @@ def check_source():
             require(png_dimensions(pp.read_bytes())==(sz,sz),f'{kind}: wrong icon size {sz}')
     require('write_support_view' not in (ROOT/'src-tauri/src/lib.rs').read_text(encoding="utf-8"),'Previously reported dead-code helper still exists')
     require((ROOT/'frontend/help_center.js').is_file(),'Help Center is missing')
-    print('PASS: source AppStream, executable identity, official icons, 0.8.2-rc7 and previous lint fix')
+    print('PASS: source AppStream, executable identity, official icons, 0.8.2-rc8 and previous lint fix')
     if shutil.which('appstreamcli'):
         cmd=['appstreamcli','validate','--no-net',str(RES/(IDENT+'.metainfo.xml'))]
         print('Running:',*cmd)
@@ -133,10 +133,22 @@ def verify_rpm(path):
     require(shutil.which('rpm2cpio') and shutil.which('cpio'),'Install rpm2cpio and cpio to validate RPM payload.')
     # Extract only in a new temporary directory, not in the user's source or home.
     with tempfile.TemporaryDirectory(prefix='tcs-rc6-rpm-qa-') as tmp:
-        a=subprocess.Popen(['rpm2cpio',str(path)],stdout=subprocess.PIPE)
-        b=subprocess.run(['cpio','-idm','--quiet','--no-absolute-filenames'],stdin=a.stdout,cwd=tmp,capture_output=True,text=True)
+        # Keep the integrity inspection: allow RPM payloads to contain repeated
+        # directory entries / timestamps without causing false extraction errors.
+        a=subprocess.Popen(['rpm2cpio',str(path)],stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+        b=subprocess.run(['cpio','-idmu','--quiet','--no-absolute-filenames'],stdin=a.stdout,cwd=tmp,capture_output=True,text=True)
         if a.stdout:a.stdout.close()
-        require(a.wait()==0 and b.returncode==0,'RPM extraction failed: '+b.stderr)
+        rpm_stderr=a.stderr.read().decode('utf-8',errors='replace') if a.stderr else ''
+        rpm_status=a.wait()
+        if rpm_status or b.returncode:
+            details=f'rpm2cpio={rpm_status}, cpio={b.returncode}; cpio stderr={b.stderr.strip()}; rpm stderr={rpm_stderr.strip()}'
+            # Some runner cpio builds reject payload metadata handled by libarchive.
+            # Fallback still extracts the full RPM and performs all checks_payload assertions.
+            bsdtar=shutil.which('bsdtar')
+            if not bsdtar:
+                raise ValueError('RPM extraction failed: '+details)
+            fallback=subprocess.run([bsdtar,'-xf',str(path),'-C',tmp],capture_output=True,text=True)
+            require(fallback.returncode==0,'RPM extraction failed: '+details+'; bsdtar: '+fallback.stderr.strip())
         files={}
         prefix=Path(tmp)/'usr/share'
         for subdir in ['applications','icons/hicolor','metainfo']:

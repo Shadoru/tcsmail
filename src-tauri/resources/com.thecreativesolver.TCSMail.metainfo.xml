@@ -17,7 +17,7 @@
   <launchable type="desktop-id">com.thecreativesolver.TCSMail.desktop</launchable>
   <categories><category>Office</category><category>Email</category></categories>
   <icon type="stock">com.thecreativesolver.TCSMail</icon>
-  <releases><release version="0.8.2-rc7" date="2026-10-26"/></releases>
+  <releases><release version="0.8.2-rc8" date="2026-10-26"/></releases>
   <provides><binary>tcs-mail</binary></provides>
   <!-- Screenshot URLs will be inserted only after privacy-safe, genuine RC5 screenshots are hosted on a stable HTTPS endpoint. -->
 </component>

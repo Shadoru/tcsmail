@@ -13,7 +13,7 @@ readme = (root/'README.md').read_text(encoding='utf-8')
 for relative in re.findall(r'\]\(([^)#]+)(?:#[^)]+)?\)', readme):
     if '://' not in relative:
         assert (root/relative).exists(), f'dead README reference: {relative}'
-assert '0.8.2-rc7' in readme
+assert '0.8.2-rc8' in readme
 assert '0.8.2-rc6' not in readme
 
 workflow = (root/'.github/workflows/tcsmail-homologacao.yml').read_text(encoding='utf-8')

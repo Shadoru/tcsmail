@@ -8,9 +8,9 @@ from pathlib import Path
 r=Path(__file__).resolve().parents[2]
 read=lambda p:(r/p).read_text(encoding='utf-8')
 a=json.loads(read('src-tauri/tauri.conf.json'))
-assert a['version']=='0.8.2-rc7'
+assert a['version']=='0.8.2-rc8'
 assert a['identifier']=='com.thecreativesolver.TCSMail'
-assert a['bundle']['windows']['wix']['version']=='0.8.207'
+assert a['bundle']['windows']['wix']['version']=='0.8.208'
 main=read('frontend/main.js')
 controls=read('frontend/ui_controls.js')
 css=read('frontend/styles.css')
@@ -40,7 +40,7 @@ for needle in ('Mover mensagens entre pastas','Move messages between folders','L
 assert "'Destino':'Destination'" in i18n
 for variant in ('linux-x64','windows-x64','macos-intel','macos-arm64'):
  assert variant in workflow
-assert '0.rc7.1' in workflow
+assert '0.rc8.1' in workflow
 for test in ('rc7-folder-move.test.mjs','rc7-ui-and-packager.py','test_utf8_ci_sources.py'):
  assert test in workflow,test
 print('PASS: RC7 UI/move/help/translation, version/packagers, all-OS release gates')

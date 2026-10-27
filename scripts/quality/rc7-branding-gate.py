@@ -6,7 +6,7 @@ import json
 import struct
 import zlib
 root=Path(__file__).resolve().parents[2]
-m=json.loads((root/'scripts/quality/rc7-branding-manifest.json').read_text(encoding='utf-8'))
+m=json.loads((root/'scripts/quality/rc8-branding-manifest.json').read_text(encoding='utf-8'))
 for name,expected in m['files'].items():
     path=root/name
     assert path.is_file(), f'Missing approved brand resource: {name}'
@@ -38,7 +38,9 @@ for name in m['files']:
         verify_png(root/name)
 
 conf=json.loads((root/'src-tauri/tauri.conf.json').read_text(encoding='utf-8'))
-assert conf['version']=='0.8.2-rc7'
+assert conf['version']=='0.8.2-rc8'
+assert m['version']=='0.8.2-rc8'
+assert len(m['files']) == 13
 assert (root/'src-tauri/icons/icon.icns').is_file() and (root/'src-tauri/icons/icon.ico').is_file()
 assert (root/'frontend/index.html').read_text(encoding='utf-8').count('assets/tcs-mail-logo.png')>=1
 print('PASS: approved raster-derived source logo SHA-256 across 13 runtime and packaging assets')

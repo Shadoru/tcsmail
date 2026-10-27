@@ -20,7 +20,7 @@ REQ = {
 
 def check_source():
     conf = json.loads((ROOT / 'src-tauri/tauri.conf.json').read_text(encoding='utf-8'))
-    assert conf.get('version') == '0.8.2-rc7', 'Version is not 0.8.2-rc7'
+    assert conf.get('version') == '0.8.2-rc8', 'Version is not 0.8.2-rc8'
     assert conf.get('identifier') == 'com.thecreativesolver.TCSMail', 'Unexpected Tauri ID'
     assert conf.get('bundle', {}).get('active'), 'Tauri bundle disabled'
     paths = ['Cargo.toml', 'Cargo.lock', 'frontend/main.js', 'src-tauri/icons/icon.ico',
@@ -28,7 +28,7 @@ def check_source():
     for name in paths:
         assert (ROOT / name).is_file(), f'Missing source: {name}'
     conf_wix=conf.get('bundle',{}).get('windows',{}).get('wix',{})
-    assert conf_wix.get('version') == '0.8.207', 'MSI internal version wrong'
+    assert conf_wix.get('version') == '0.8.208', 'MSI internal version wrong'
     rpm_files=conf['bundle']['linux']['rpm']['files']
     for sz in (32,128,256,512):
         alias=f'/usr/share/icons/hicolor/{sz}x{sz}/apps/tcs-mail.png'
@@ -58,11 +58,11 @@ def bundle(args):
         for p in selected:
             if p.suffix == '.deb':
                 version = subprocess.check_output(['dpkg-deb','-f',str(p),'Version'],text=True).strip()
-                if not (version == '0.8.2-rc7' or version.startswith('0.8.2-rc7-')):
+                if not (version == '0.8.2-rc8' or version.startswith('0.8.2-rc8-')):
                     raise RuntimeError(f'DEB version mismatch: {version}')
             elif p.suffix == '.rpm':
                 version = subprocess.check_output(['rpm','-qp','--queryformat','%{VERSION}-%{RELEASE}',str(p)],text=True).strip()
-                if version != '0.8.2-0.rc7.1':
+                if version != '0.8.2-0.rc8.1':
                     raise RuntimeError(f'RPM version mismatch: {version}')
     # linux deeper inspection using package checker
     if args.kind == 'linux':
@@ -71,7 +71,7 @@ def bundle(args):
             subprocess.run([sys.executable, str(script), '--deb' if p.suffix=='.deb' else '--rpm', str(p)], check=True)
     out = pathlib.Path('delivery') / args.label
     out.mkdir(parents=True, exist_ok=True)
-    package = out / f'tcsmail-0.8.2-rc7-{args.label}.zip'
+    package = out / f'tcsmail-0.8.2-rc8-{args.label}.zip'
     manifest = []
     with zipfile.ZipFile(package, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=6, allowZip64=True) as z:
         for p in selected:
@@ -89,7 +89,7 @@ def bundle(args):
             manifest.append({'name':p.name,'kind':'app' if p.is_dir() else p.suffix[1:]})
     sha = hashlib.sha256(package.read_bytes()).hexdigest()
     (out / (package.name+'.sha256')).write_text(f'{sha}  {package.name}\n',encoding='utf-8')
-    (out / 'build-info.json').write_text(json.dumps({'version':'0.8.2-rc7','github_sha':args.sha,'platform':args.label,'files':manifest,'zip_sha256':sha}, indent=2),encoding='utf-8')
+    (out / 'build-info.json').write_text(json.dumps({'version':'0.8.2-rc8','github_sha':args.sha,'platform':args.label,'files':manifest,'zip_sha256':sha}, indent=2),encoding='utf-8')
     print('PASS:', package, 'SHA-256', sha)
 
 if __name__ == '__main__':

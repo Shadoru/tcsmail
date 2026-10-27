@@ -5,7 +5,7 @@ Aplicável a todas as alterações deste repositório. Este arquivo orienta agen
 ## Identidade, segurança e limites
 
 - Fonte canônica: este repositório. Antes de alterar, obter `git status`, commit-base e diffs. Nunca substituir silenciosamente código atualizado por ZIP antigo.
-- Versão corrente: `0.8.2-rc7`; somente modificar a versão quando solicitado. Preservar `com.thecreativesolver.TCSMail` e os dados persistidos do usuário.
+- Versão corrente: `0.8.2-rc8`; somente modificar a versão quando solicitado. Preservar `com.thecreativesolver.TCSMail` e os dados persistidos do usuário.
 - Não publicar releases ou registrar dados de mensagens, tokens, credenciais, endereços e conteúdo de e-mail em logs/testes. Use caixas e tokens sintéticos.
 - Todo o trabalho do usuário fica em `~/Projetos`; preservar `TCS-Mail-P2`, `TCS-Mail-Validacao`, fontes, credenciais, bancos e anexos. A limpeza exige listagem prévia e confirmação explícita.
 - Nenhuma correção específica de Windows pode alterar indevidamente Linux ou macOS. Examinar todos os `cfg` por plataforma e cobrir Windows x64, Linux x64, macOS Intel e ARM64.
@@ -75,7 +75,7 @@ Falha recorrente deve gerar: (a) teste de regressão que falha antes da correç�
 
 ### Empacotamento e versões
 
-- SemVer público `0.8.2-rc7`; MSI/WiX `0.8.207`; RPM `Version=0.8.2, Release=0.rc7.1` via override de **empacotamento**, não mudança global de identidade.
+- SemVer público `0.8.2-rc8`; MSI/WiX `0.8.208`; RPM `Version=0.8.2, Release=0.rc8.1` via override de **empacotamento**, não mudança global de identidade.
 - Não declarar manualmente no RPM os aliases `tcs-mail.png` que o Tauri já escreve. Não exigir aliases removidos como entradas **configuradas**; inspecionar os recursos **reais**.
 - No macOS, evitar shadowing de import Python (`subprocess`) e preservar o `.app` com `ditto`.
 - O `AGENTS.md` orienta, mas o controle efetivo depende dos gates de CI, dos testes e da revisão do diff.

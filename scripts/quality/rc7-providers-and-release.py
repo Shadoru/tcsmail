@@ -4,13 +4,13 @@ from pathlib import Path
 import json, re, sys
 root=Path(__file__).resolve().parents[2]
 conf=json.loads((root/'src-tauri/tauri.conf.json').read_text(encoding="utf-8"))
-assert conf['version']=='0.8.2-rc7'
+assert conf['version']=='0.8.2-rc8'
 assert conf['identifier']=='com.thecreativesolver.TCSMail'
-assert conf['bundle']['windows']['wix']['version']=='0.8.207'
+assert conf['bundle']['windows']['wix']['version']=='0.8.208'
 rpm=conf['bundle']['linux']['rpm']['files']
 assert not any('/apps/tcs-mail.png' in path for path in rpm)
 work=(root/'.github/workflows/tcsmail-homologacao.yml').read_text(encoding="utf-8")
-assert '0.rc7.1' in work and '--bundles rpm' in work
+assert '0.rc8.1' in work and '--bundles rpm' in work
 assert 'cargo fmt --all -- --check' in work
 assert 'cargo test --locked --workspace' in work
 assert 'tcsmail-package-guard.py --bundles' in work

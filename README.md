@@ -1,4 +1,4 @@
-# TCS Mail 0.8.2-rc7 — candidato de homologação
+# TCS Mail 0.8.2-rc8 — candidato de homologação
 
 Cliente de e-mail **local-first**, multiplataforma (Rust/Tauri 2), com IMAP/SMTP,
 OAuth de Google/Microsoft e IA opcional. Código-fonte sob licença MPL-2.0.
@@ -25,7 +25,7 @@ cargo clippy --locked --workspace --all-targets -- -D warnings
 node scripts/quality/rc7-first-run-regression.mjs
 python3 scripts/quality/tcsmail-package-guard.py --source
 cargo tauri build --bundles deb
-cargo tauri build --bundles rpm --config '{"version":"0.8.2","bundle":{"linux":{"rpm":{"release":"0.rc7.1"}}}}'
+cargo tauri build --bundles rpm --config '{"version":"0.8.2","bundle":{"linux":{"rpm":{"release":"0.rc8.1"}}}}'
 ```
 
 Instalar o DEB somente após inspecionar o pacote e preservar dados pessoais.
