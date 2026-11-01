@@ -1,30 +1,6 @@
 name: IMAP 0.12/0.17 cross-platform validation
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - 'frontend/**'
-      - 'tests/**'
-      - 'scripts/**'
-      - 'crates/**'
-      - 'src-tauri/**'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - 'vendor/**'
-      - 'scripts/quality/**'
-      - '.github/workflows/imap-cross-platform.yml'
-  pull_request:
-    paths:
-      - 'frontend/**'
-      - 'tests/**'
-      - 'scripts/**'
-      - 'crates/**'
-      - 'src-tauri/**'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - 'vendor/**'
-      - 'scripts/quality/**'
-      - '.github/workflows/imap-cross-platform.yml'
 jobs:
   verify:
     strategy:

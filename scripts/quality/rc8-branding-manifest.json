@@ -1,0 +1,19 @@
+{
+  "version": "0.8.2-rc8",
+  "source": "Exact approved original raster motif, cropped and resized to 79% of canvas; no redraw",
+  "files": {
+    "src-tauri/icons/icon.png": "ae5d9f85330b3c650c87d92d4633dfe2454b4a0f7565783c9a361f895d6e8992",
+    "src-tauri/icons/32x32.png": "2ba2e6632ef75c51b033aa5fb1297a399be2fe93e438496a63a4085324981b53",
+    "src-tauri/icons/128x128.png": "ddf20b65dec575e75f921038e85ec368b645e45c0757ffa316f29761d1c0e432",
+    "src-tauri/icons/128x128@2x.png": "a0e2bff71e5c92063f514518ac54973e99836de58aa4e8c5bcbdea937d609d10",
+    "src-tauri/icons/256x256.png": "a0e2bff71e5c92063f514518ac54973e99836de58aa4e8c5bcbdea937d609d10",
+    "src-tauri/icons/512x512.png": "ae5d9f85330b3c650c87d92d4633dfe2454b4a0f7565783c9a361f895d6e8992",
+    "frontend/assets/tcs-mail-logo.png": "a0e2bff71e5c92063f514518ac54973e99836de58aa4e8c5bcbdea937d609d10",
+    "src-tauri/icons/icon.ico": "b4a18407b0f1ee1c73d57cb74805105c9986165eec781b63c8bfa20c35f36bb3",
+    "src-tauri/icons/icon.icns": "029de8e410368d106cc6cc86bb031b3f66190d47a941d049b61471fa0da90726",
+    "src-tauri/resources/packaging-icons/tcs-mail-32.png": "2ba2e6632ef75c51b033aa5fb1297a399be2fe93e438496a63a4085324981b53",
+    "src-tauri/resources/packaging-icons/tcs-mail-128.png": "ddf20b65dec575e75f921038e85ec368b645e45c0757ffa316f29761d1c0e432",
+    "src-tauri/resources/packaging-icons/tcs-mail-256.png": "a0e2bff71e5c92063f514518ac54973e99836de58aa4e8c5bcbdea937d609d10",
+    "src-tauri/resources/packaging-icons/tcs-mail-512.png": "ae5d9f85330b3c650c87d92d4633dfe2454b4a0f7565783c9a361f895d6e8992"
+  }
+}
