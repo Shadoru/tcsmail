@@ -2,6 +2,27 @@ name: TCS Mail 0.8.3 - native builds and installers
 
 on:
   workflow_dispatch:
+    inputs:
+      linux:
+        description: "Linux x64 - DEB e RPM"
+        required: true
+        type: boolean
+        default: true
+      windows:
+        description: "Windows x64 - EXE e MSI"
+        required: true
+        type: boolean
+        default: true
+      mac_intel:
+        description: "macOS Intel - APP e DMG"
+        required: true
+        type: boolean
+        default: true
+      mac_arm:
+        description: "macOS Apple Silicon - APP e DMG"
+        required: true
+        type: boolean
+        default: true
 
 permissions:
   contents: read
