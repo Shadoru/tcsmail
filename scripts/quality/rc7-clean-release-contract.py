@@ -4,7 +4,7 @@ from pathlib import Path
 import re
 
 root = Path(__file__).resolve().parents[2]
-allowed_root = {'AGENTS.md', 'README.md', 'LICENSE'}
+allowed_root = {'AGENTS.md', 'README.md', 'LICENSE', 'GUIA_0.8.3.md', 'AUDITORIA_RC8_FIX1.md', 'AUDITORIA_0.8.3.md', 'VALIDACAO_0.8.3.md'}
 strays = sorted(p.name for p in root.iterdir() if p.is_file() and
                 p.suffix.lower() in {'.md', '.txt', '.json'} and p.name not in allowed_root)
 assert not strays, f'obsolete root documentation/manifests: {strays}'
@@ -13,7 +13,7 @@ readme = (root/'README.md').read_text(encoding='utf-8')
 for relative in re.findall(r'\]\(([^)#]+)(?:#[^)]+)?\)', readme):
     if '://' not in relative:
         assert (root/relative).exists(), f'dead README reference: {relative}'
-assert '0.8.2-rc8' in readme
+assert readme.splitlines()[0] == '# TCS Mail 0.8.3'
 assert '0.8.2-rc6' not in readme
 
 workflow = (root/'.github/workflows/tcsmail-homologacao.yml').read_text(encoding='utf-8')

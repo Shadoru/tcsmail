@@ -7,7 +7,7 @@ root = Path(__file__).resolve().parents[2]
 quality = root / "scripts/quality"
 failures = []
 count = 0
-for path in sorted(quality.glob("*.py")):
+for path in sorted(quality.rglob("*.py")) + [root / "scripts/build-0.8.3.py"]:
     code = path.read_text(encoding="utf-8")
     tree = ast.parse(code, filename=str(path))
     for node in ast.walk(tree):

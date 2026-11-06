@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 """Static cross-platform regression invariants. Not a native test substitute."""
 from pathlib import Path
+from v083_release import pipeline_contract
 import json, re, sys
 root=Path(__file__).resolve().parents[2]
 conf=json.loads((root/'src-tauri/tauri.conf.json').read_text(encoding="utf-8"))
-assert conf['version']=='0.8.2-rc8'
+assert conf['version']=='0.8.3'
 assert conf['identifier']=='com.thecreativesolver.TCSMail'
-assert conf['bundle']['windows']['wix']['version']=='0.8.208'
+assert conf['bundle']['windows']['wix']['version']=='0.8.300'
 rpm=conf['bundle']['linux']['rpm']['files']
 assert not any('/apps/tcs-mail.png' in path for path in rpm)
-work=(root/'.github/workflows/tcsmail-homologacao.yml').read_text(encoding="utf-8")
-assert '0.rc8.1' in work and '--bundles rpm' in work
+work=pipeline_contract(root)
+assert '"release": "1"' in work and '--bundles rpm' in work
 assert 'cargo fmt --all -- --check' in work
 assert 'cargo test --locked --workspace' in work
 assert 'tcsmail-package-guard.py --bundles' in work

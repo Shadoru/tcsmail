@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import assert from 'node:assert/strict';
 const js=fs.readFileSync('frontend/main.js','utf8');
 assert.match(js,/id="batchDelete"/);
+assert.match(js,/\$\('#batchDelete'\)\?\.remove\(\)/);
 assert.match(js,/batchDelete.*addEventListener\('click',\(\)=>batchAction\('delete'\)/);
 assert.match(js,/async function executeSelectedAction\(ids,action/);
 assert.match(js,/state\.selected=new Set\(failures\.map/);

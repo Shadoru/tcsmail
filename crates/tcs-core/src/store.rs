@@ -251,12 +251,12 @@ impl CoreStore {
             .pragma_query_value(None, "user_version", |r| r.get(0))
             .map_err(|e| e.to_string())?;
         if old < 10 && self.path.exists() {
-            let _ = c.execute_batch("PRAGMA wal_checkpoint(FULL);");
             let stamp = Local::now().format("%Y%m%d-%H%M%S");
             let b = self
                 .path
                 .with_file_name(format!("mail.db.backup-0.8.0-{stamp}"));
-            fs::copy(&self.path, &b).map_err(|e| e.to_string())?;
+            c.backup(rusqlite::DatabaseName::Main, &b, None)
+                .map_err(|e| e.to_string())?;
         }
         c.execute_batch(include_str!("../data/schema_v10.sql"))
             .map_err(|e| e.to_string())?;
@@ -568,7 +568,7 @@ impl CoreStore {
                 })
             })
             .map_err(|e| e.to_string())?;
-        let mut items: Vec<_> = rows.filter_map(Result::ok).collect();
+        let mut items: Vec<_> = rows.collect::<Result<_, _>>().map_err(|e| e.to_string())?;
         for item in &mut items {
             item.smart_category = smart_category_for(item);
         }
@@ -588,7 +588,7 @@ impl CoreStore {
         let total_sql = format!("SELECT COUNT(*) FROM messages m {joins}{where_sql}");
         let total: i64 = c
             .query_row(&total_sql, refs.as_slice(), |r| r.get(0))
-            .unwrap_or(items.len() as i64);
+            .map_err(|e| e.to_string())?;
         Ok(MessagePage {
             items,
             next_cursor,
@@ -1384,6 +1384,96 @@ mod regression_tests {
             // message subtree through DB cleanup rather than the whole cache root.
             let _ = cache;
         }
+    }
+
+    #[test]
+    fn list_page_reports_unreadable_rows_instead_of_silently_omitting_them() {
+        let (store, path) = temp_store("unreadable-list-row");
+        let db = store.legacy().unwrap();
+        let account_id = account(&db);
+        db.upsert_message(&message(account_id, 42, true)).unwrap();
+        store
+            .conn()
+            .unwrap()
+            .execute("UPDATE messages SET subject=x'80'", [])
+            .unwrap();
+        let result = store.list_page(Some(account_id), Some("INBOX"), None, None, 20, false);
+        cleanup(&path);
+        assert!(
+            result.is_err(),
+            "a corrupt row must not be silently omitted from a successful page"
+        );
+    }
+
+    #[test]
+    fn core_migration_backup_includes_committed_wal_with_an_older_reader() {
+        let directory =
+            std::env::temp_dir().join(format!("tcs-core-backup-{}", uuid::Uuid::new_v4()));
+        let path = directory.join("synthetic.db");
+        {
+            let store = CoreStore::open(&path).unwrap();
+            let writer = store.conn().unwrap();
+            writer.pragma_update(None, "wal_autocheckpoint", 0).unwrap();
+            writer.execute_batch("CREATE TABLE backup_probe(value BLOB); PRAGMA user_version=9; PRAGMA wal_checkpoint(TRUNCATE);").unwrap();
+            let reader = store.conn().unwrap();
+            reader.execute_batch("BEGIN").unwrap();
+            assert_eq!(
+                reader
+                    .query_row("SELECT COUNT(*) FROM backup_probe", [], |r| r
+                        .get::<_, i64>(0))
+                    .unwrap(),
+                0
+            );
+            writer
+                .execute("INSERT INTO backup_probe VALUES(x'0080ff')", [])
+                .unwrap();
+            let (_, logged, checkpointed) = writer
+                .query_row("PRAGMA wal_checkpoint(PASSIVE)", [], |r| {
+                    Ok((
+                        r.get::<_, i64>(0)?,
+                        r.get::<_, i64>(1)?,
+                        r.get::<_, i64>(2)?,
+                    ))
+                })
+                .unwrap();
+            assert!(
+                logged > checkpointed,
+                "test requires committed data still in WAL"
+            );
+            store.migrate_v10().unwrap();
+            let backups = fs::read_dir(&directory)
+                .unwrap()
+                .map(|p| p.unwrap().path())
+                .filter(|p| {
+                    p.file_name()
+                        .unwrap()
+                        .to_string_lossy()
+                        .starts_with("mail.db.backup-0.8.0-")
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(backups.len(), 1, "legacy core backup filename is preserved");
+            let backup = Connection::open(&backups[0]).unwrap();
+            assert_eq!(
+                backup
+                    .query_row("SELECT value FROM backup_probe", [], |r| r
+                        .get::<_, Vec<u8>>(0))
+                    .unwrap(),
+                vec![0, 128, 255]
+            );
+            assert_eq!(
+                backup
+                    .query_row("PRAGMA integrity_check", [], |r| r.get::<_, String>(0))
+                    .unwrap(),
+                "ok"
+            );
+            assert_eq!(
+                backup
+                    .pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
+                    .unwrap(),
+                9
+            );
+        }
+        fs::remove_dir_all(directory).unwrap();
     }
 
     #[test]

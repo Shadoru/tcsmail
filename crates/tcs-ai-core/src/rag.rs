@@ -5,9 +5,7 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::{
     fs,
-    io::Read,
     path::{Path, PathBuf},
-    process::Command,
     time::Duration,
 };
 use zip::ZipArchive;
@@ -23,6 +21,7 @@ const MAX_EXTRACTED_CHARS: usize = 2_000_000;
 #[derive(Clone)]
 pub struct AiStore {
     path: PathBuf,
+    unavailable: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -41,14 +40,28 @@ impl AiStore {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
-        let s = Self { path };
+        let s = Self {
+            path,
+            unavailable: false,
+        };
         s.migrate()?;
         Ok(s)
+    }
+    /// Retain an unreadable optional AI database untouched. Mail remains usable;
+    /// all AI commands return an actionable error rather than opening a new DB.
+    pub fn unavailable(path: impl AsRef<Path>) -> Self {
+        Self {
+            path: path.as_ref().to_path_buf(),
+            unavailable: true,
+        }
     }
     pub fn path(&self) -> &Path {
         &self.path
     }
     pub fn conn(&self) -> Result<Connection, String> {
+        if self.unavailable {
+            return Err("O banco opcional de IA está indisponível. Seus e-mails continuam disponíveis. Preserve ai.db e consulte o diagnóstico antes de restaurá-lo.".into());
+        }
         let c = Connection::open(&self.path).map_err(|e| e.to_string())?;
         c.busy_timeout(Duration::from_secs(5))
             .map_err(|e| e.to_string())?;
@@ -362,6 +375,27 @@ impl AiStore {
         if parts.is_empty() {
             return Err("nenhum conteúdo indexável".into());
         }
+        parts.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
+        let stamp = serde_json::json!({"extractor":"0.8.3-v1", "scope":row.1, "binding":binding, "providers":self.providers()?, "parts":parts});
+        let digest = format!("{:x}", Sha256::digest(stamp.to_string().as_bytes()));
+        let c = self.conn()?;
+        let unchanged: bool = c.query_row("SELECT EXISTS(SELECT 1 FROM ai_sources s JOIN ai_source_revisions r ON r.id=s.current_revision_id WHERE s.id=?1 AND r.content_hash=?2 AND r.status='active')",params![id,digest],|r|r.get(0)).map_err(|e|e.to_string())?;
+        if unchanged {
+            let count: i64 = c
+                .query_row(
+                    "SELECT COUNT(*) FROM ai_chunks WHERE source_id=?1",
+                    params![id],
+                    |r| r.get(0),
+                )
+                .map_err(|e| e.to_string())?;
+            c.execute(
+                "UPDATE ai_sources SET last_index_ts=?2,last_error='' WHERE id=?1",
+                params![id, Utc::now().timestamp()],
+            )
+            .map_err(|e| e.to_string())?;
+            return Ok(count as usize);
+        }
+        drop(c);
         let texts = parts.iter().map(|x| x.2.clone()).collect::<Vec<_>>();
         let vectors = if binding.model.trim().is_empty() {
             vec![Vec::new(); texts.len()]
@@ -373,11 +407,6 @@ impl AiStore {
         if vectors.len() != parts.len() {
             return Err("provider retornou quantidade inválida de embeddings".into());
         }
-        let mut hash = Sha256::new();
-        for (_, _, t) in &parts {
-            hash.update(t.as_bytes());
-        }
-        let digest = format!("{:x}", hash.finalize());
         let mut c = self.conn()?;
         let tx = c.transaction().map_err(|e| e.to_string())?;
         tx.execute("INSERT INTO ai_source_revisions(source_id,content_hash,created_ts,status) VALUES(?1,?2,?3,'staging')",params![id,digest,Utc::now().timestamp()]).map_err(|e|e.to_string())?;
@@ -428,7 +457,7 @@ impl AiStore {
         let mut candidates: std::collections::HashMap<i64, (RagSearchItem, f32)> =
             std::collections::HashMap::new();
         if !fts.is_empty() {
-            let sql=format!("SELECT ch.id,ch.source_id,ch.revision_id,ch.text,ch.metadata_json,bm25(ai_chunks_fts) score FROM ai_chunks_fts JOIN ai_chunks ch ON ch.id=ai_chunks_fts.rowid JOIN ai_sources s ON s.id=ch.source_id WHERE ai_chunks_fts MATCH ?1 AND ch.revision_id=s.current_revision_id AND lower(ch.account_scope) IN ({placeholders}) ORDER BY score LIMIT {}",limit.max(1)*4);
+            let sql=format!("SELECT ch.id,ch.source_id,ch.revision_id,ch.text,ch.metadata_json,bm25(ai_chunks_fts) score FROM ai_chunks_fts JOIN ai_chunks ch ON ch.id=ai_chunks_fts.rowid JOIN ai_sources s ON s.id=ch.source_id JOIN ai_collections c ON c.id=s.collection_id WHERE s.enabled=1 AND c.enabled=1 AND ai_chunks_fts MATCH ?1 AND ch.revision_id=s.current_revision_id AND lower(ch.account_scope) IN ({placeholders}) ORDER BY score LIMIT {}",limit.max(1)*4);
             let mut vals: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(fts)];
             for s in &scope_values {
                 vals.push(Box::new(s.clone()));
@@ -447,7 +476,7 @@ impl AiStore {
                 }) {
                     for r in rows {
                         let r = r.map_err(|e| e.to_string())?;
-                        let score = (1.0 / (1.0 + r.5.abs())) as f32;
+                        let score = lexical_score(r.5);
                         candidates.insert(
                             r.0,
                             (
@@ -475,7 +504,7 @@ impl AiStore {
                 &[query.to_string()],
             ) {
                 if let Some(qv) = vs.first() {
-                    let sql=format!("SELECT ch.id,ch.source_id,ch.revision_id,ch.text,ch.embedding,ch.metadata_json FROM ai_chunks ch JOIN ai_sources s ON s.id=ch.source_id WHERE ch.revision_id=s.current_revision_id AND lower(ch.account_scope) IN ({})",(0..scope_values.len()).map(|i|format!("?{}",i+1)).collect::<Vec<_>>().join(","));
+                    let sql=format!("SELECT ch.id,ch.source_id,ch.revision_id,ch.text,ch.embedding,ch.metadata_json FROM ai_chunks ch JOIN ai_sources s ON s.id=ch.source_id JOIN ai_collections c ON c.id=s.collection_id WHERE s.enabled=1 AND c.enabled=1 AND ch.revision_id=s.current_revision_id AND lower(ch.account_scope) IN ({})",(0..scope_values.len()).map(|i|format!("?{}",i+1)).collect::<Vec<_>>().join(","));
                     let refs = scope_values
                         .iter()
                         .map(|s| s as &dyn rusqlite::ToSql)
@@ -591,25 +620,18 @@ fn read_source(path: &Path) -> Result<String, String> {
         .chars()
         .take(MAX_EXTRACTED_CHARS)
         .collect()),
-        "pdf" => {
-            let o = Command::new("pdftotext")
-                .args(["-layout", &path.display().to_string(), "-"])
-                .output()
-                .map_err(|e| format!("pdftotext indisponível: {e}"))?;
-            if !o.status.success() {
-                return Err("falha ao extrair PDF".into());
-            }
-            Ok(String::from_utf8_lossy(&o.stdout)
-                .chars()
-                .take(MAX_EXTRACTED_CHARS)
-                .collect())
-        }
+        "pdf" => Ok(crate::extraction::pdf_text(path)?
+            .chars()
+            .take(MAX_EXTRACTED_CHARS)
+            .collect()),
         "docx" => {
             let f = fs::File::open(path).map_err(|e| e.to_string())?;
             let mut z = ZipArchive::new(f).map_err(|e| e.to_string())?;
-            let mut x = z.by_name("word/document.xml").map_err(|e| e.to_string())?;
-            let mut raw = String::new();
-            x.read_to_string(&mut raw).map_err(|e| e.to_string())?;
+            let x = z.by_name("word/document.xml").map_err(|e| e.to_string())?;
+            if x.size() > crate::extraction::MAX_EXTRACTED_BYTES as u64 {
+                return Err("O XML do DOCX excede 8 MiB. Divida o documento.".into());
+            }
+            let raw = crate::extraction::bounded_text(x)?;
             Ok(strip_markup(&raw)
                 .chars()
                 .take(MAX_EXTRACTED_CHARS)
@@ -681,3 +703,97 @@ CREATE TABLE IF NOT EXISTS ai_tool_audit(id INTEGER PRIMARY KEY AUTOINCREMENT,cr
 CREATE UNIQUE INDEX IF NOT EXISTS ai_tool_idempotency ON ai_tool_audit(idempotency_key) WHERE idempotency_key<>'';
 CREATE TABLE IF NOT EXISTS ai_migration_log(key TEXT PRIMARY KEY,completed_ts INTEGER NOT NULL,detail TEXT NOT NULL DEFAULT '');
 "#;
+
+// FTS5 returns lower (more negative) BM25 for stronger matches. Normalize it
+// monotonically to [0,1], preserving order when combining lexical/vector scores.
+fn lexical_score(bm25: f64) -> f32 {
+    let strength = (-bm25).max(0.0);
+    (strength / (1.0 + strength)) as f32
+}
+#[cfg(test)]
+mod ranking_tests {
+    use super::*;
+    #[test]
+    fn lower_bm25_means_higher_lexical_score() {
+        assert!(super::lexical_score(-10.0) > super::lexical_score(-1.0));
+        assert!(super::lexical_score(-1.0) > super::lexical_score(-0.000001));
+        assert_eq!(super::lexical_score(0.0), 0.0);
+    }
+
+    #[test]
+    fn unchanged_source_keeps_revision_and_disabled_source_is_not_evidence() {
+        let base = std::env::temp_dir().join(format!(
+            "tcs-rag-083-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&base).unwrap();
+        let file = base.join("source.txt");
+        fs::write(&file, "Synthetic policy alpha alpha alpha").unwrap();
+        let store = AiStore::open(base.join("ai.db")).unwrap();
+        store
+            .add_source(file.to_str().unwrap(), "Synthetic", "1")
+            .unwrap();
+        let id = store.sources().unwrap()[0]["id"].as_i64().unwrap();
+        let router = ProviderRouter::new(Vec::new()).unwrap();
+        let binding = ModelBinding::default();
+        store.index_source(id, &router, &binding, None).unwrap();
+        let revision = || {
+            store
+                .conn()
+                .unwrap()
+                .query_row(
+                    "SELECT current_revision_id FROM ai_sources WHERE id=?1",
+                    [id],
+                    |r| r.get::<_, i64>(0),
+                )
+                .unwrap()
+        };
+        let first = revision();
+        store.index_source(id, &router, &binding, None).unwrap();
+        assert_eq!(first, revision());
+        assert!(!store
+            .search("alpha", &["1".into()], &router, &binding, |_| None, 6)
+            .unwrap()
+            .is_empty());
+        store
+            .conn()
+            .unwrap()
+            .execute("UPDATE ai_sources SET enabled=0 WHERE id=?1", [id])
+            .unwrap();
+        assert!(store
+            .search("alpha", &["1".into()], &router, &binding, |_| None, 6)
+            .unwrap()
+            .is_empty());
+        store
+            .conn()
+            .unwrap()
+            .execute("UPDATE ai_sources SET enabled=1 WHERE id=?1", [id])
+            .unwrap();
+        fs::write(&file, "Synthetic policy changed alpha").unwrap();
+        store.index_source(id, &router, &binding, None).unwrap();
+        assert_ne!(first, revision());
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn unavailable_ai_keeps_invalid_database_untouched() {
+        let path = std::env::temp_dir().join(format!(
+            "tcs-invalid-ai-{}-{}.db",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::write(&path, b"synthetic invalid database").unwrap();
+        assert!(AiStore::open(&path).is_err());
+        let unavailable = AiStore::unavailable(&path);
+        assert!(unavailable.runtime_config().is_err());
+        assert_eq!(fs::read(&path).unwrap(), b"synthetic invalid database");
+        fs::remove_file(path).unwrap();
+    }
+}

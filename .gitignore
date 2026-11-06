@@ -44,3 +44,8 @@ __pycache__/
 *.tmp
 *.bak
 *.swp
+
+# Local release evidence and prepared installers
+/.build-rc8fix1/
+/.build-v083/
+/delivery/

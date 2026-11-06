@@ -3,6 +3,7 @@
 // applied at render time so legacy surfaces can be localized without a heavy
 // runtime or duplicated templates.
 
+import {RC8FIX1_EN} from './rc8fix1_en.js';
 const STORAGE_KEY='tcs.uiLanguage';
 const EFFECTIVE_KEY='tcs.effectiveLocale';
 const SUPPORTED=new Set(['pt-BR','en-US']);
@@ -155,6 +156,7 @@ const PATTERNS=[
 ];
 
 function preserveSpace(original,value){const a=original.match(/^\s*/)?.[0]||'',b=original.match(/\s*$/)?.[0]||'';return a+value+b}
+Object.assign(EN, RC8FIX1_EN);
 export function tr(value){
  const s=String(value??'');if(locale!=='en-US'||!s)return s;
  const trimmed=s.trim();if(!trimmed)return s;

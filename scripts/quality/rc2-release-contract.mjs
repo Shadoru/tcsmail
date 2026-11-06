@@ -2,7 +2,8 @@ import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import {filterLocalDrafts,mergeDraftRows} from '../../frontend/drafts.js';
 const cfg=JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json','utf8'));
-assert.match(cfg.version,/^0\.8\.2-rc[0-9]+$/,'Prerelease must be SemVer-shaped');
+assert.equal(cfg.version,'0.8.3','Release must be exactly 0.8.3');
+assert.match(cfg.version,/^\d+\.\d+\.\d+$/,'Stable release must be SemVer-shaped');
 assert.equal(cfg.bundle.category,'Productivity');
 assert.equal(cfg.identifier,'com.thecreativesolver.TCSMail');
 assert.ok(cfg.bundle.shortDescription.includes('e-mail'));
@@ -21,6 +22,6 @@ for (const filepath of ['src-tauri/Cargo.toml','crates/tcs-core/Cargo.toml','cra
  assert.ok(fs.readFileSync(filepath,'utf8').includes(cfg.version),`${filepath}: wrong release version`);
 }
 const meta=fs.readFileSync('src-tauri/resources/com.thecreativesolver.TCSMail.metainfo.xml','utf8');
-assert.match(meta,/<name>TCS Mail<\/name>/);assert.match(meta,/thecreativesolver.com\/mail/);
+assert.match(meta,/<name>TCS Mail<\/name>/);assert.match(meta,/<url type="homepage">https:\/\/thecreativesolver\.com\/tcsmail\/<\/url>/);
 for(const f of ['deb','rpm']) assert.ok(cfg.bundle.linux?.[f]?.files?.['/usr/share/metainfo/com.thecreativesolver.TCSMail.metainfo.xml']);
 console.log('PASS: version/identifier/metadata/icons, local sort search, UID-only deduplication');

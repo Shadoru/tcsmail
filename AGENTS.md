@@ -5,7 +5,7 @@ Aplicável a todas as alterações deste repositório. Este arquivo orienta agen
 ## Identidade, segurança e limites
 
 - Fonte canônica: este repositório. Antes de alterar, obter `git status`, commit-base e diffs. Nunca substituir silenciosamente código atualizado por ZIP antigo.
-- Versão corrente: `0.8.2-rc8`; somente modificar a versão quando solicitado. Preservar `com.thecreativesolver.TCSMail` e os dados persistidos do usuário.
+- Versão corrente: `0.8.3`; somente modificar a versão quando solicitado. Preservar `com.thecreativesolver.TCSMail` e os dados persistidos do usuário.
 - Não publicar releases ou registrar dados de mensagens, tokens, credenciais, endereços e conteúdo de e-mail em logs/testes. Use caixas e tokens sintéticos.
 - Todo o trabalho do usuário fica em `~/Projetos`; preservar `TCS-Mail-P2`, `TCS-Mail-Validacao`, fontes, credenciais, bancos e anexos. A limpeza exige listagem prévia e confirmação explícita.
 - Nenhuma correção específica de Windows pode alterar indevidamente Linux ou macOS. Examinar todos os `cfg` por plataforma e cobrir Windows x64, Linux x64, macOS Intel e ARM64.
@@ -75,7 +75,7 @@ Falha recorrente deve gerar: (a) teste de regressão que falha antes da correç�
 
 ### Empacotamento e versões
 
-- SemVer público `0.8.2-rc8`; MSI/WiX `0.8.208`; RPM `Version=0.8.2, Release=0.rc8.1` via override de **empacotamento**, não mudança global de identidade.
+- SemVer público `0.8.3`; MSI/WiX `0.8.300`; RPM `Version=0.8.3, Release=1` com versão estável e release explícita de **empacotamento**, sem mudança de identidade.
 - Não declarar manualmente no RPM os aliases `tcs-mail.png` que o Tauri já escreve. Não exigir aliases removidos como entradas **configuradas**; inspecionar os recursos **reais**.
 - No macOS, evitar shadowing de import Python (`subprocess`) e preservar o `.app` com `ditto`.
 - O `AGENTS.md` orienta, mas o controle efetivo depende dos gates de CI, dos testes e da revisão do diff.
@@ -120,3 +120,20 @@ Falha recorrente deve gerar: (a) teste de regressão que falha antes da correç�
 - Verificadores executados no CI devem usar a biblioteca padrão Python, ou instalar dependências de modo explícito antes de executá-los em todos os runners.
 - Timeout TCP não é recusa de credenciais; não criar conta antes de autenticar IMAP com êxito. Não contornar firewall, certificado ou política de segurança.
 - Fluxo OAuth deve exibir indicação de espera e erros acionáveis de rede. Testar Linux, Windows, macOS Intel e ARM64.
+
+
+## Entrega 0.8.3
+
+- Orquestrador público: `python3 scripts/build-0.8.3.py`; guia atual `GUIA_0.8.3.md`;
+  rastreabilidade e pendências em `docs/VERSAO_083.md`. A pasta-raiz permanece
+  com o nome anterior enquanto houver agentes ativos.
+- Homepage canônica: `https://thecreativesolver.com/tcsmail/`. Exigir o mesmo URL
+  em Tauri, AppStream e contratos de empacotamento.
+- Preservar Rust `1.99.0`, Tauri CLI `2.12.4` e `Cargo.lock`; os contratos ativos
+  continuam bloqueantes, incluindo novos gates de estágio do implementador.
+- Ubuntu: instalar `libarchive-tools` (fallback `bsdtar`) e `libsecret-tools`.
+  Verificar o cofre com `python3 scripts/quality/v083-linux-runtime.py --verify-secret-store`
+  dentro de uma sessão gráfica desbloqueada, usando somente credencial sintética.
+  Ausência de sessão Secret Service é pendência de runtime, nunca prova de sucesso.
+- Não executar builds pesados concorrentes. Gates de fonte somente após aviso
+  do agente principal. Windows/macOS nativos continuam pendentes até prova real.

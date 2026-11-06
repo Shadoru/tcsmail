@@ -38,7 +38,7 @@ for name in m['files']:
         verify_png(root/name)
 
 conf=json.loads((root/'src-tauri/tauri.conf.json').read_text(encoding='utf-8'))
-assert conf['version']=='0.8.2-rc8'
+assert conf['version']=='0.8.3'
 assert m['version']=='0.8.2-rc8'
 assert len(m['files']) == 13
 assert (root/'src-tauri/icons/icon.icns').is_file() and (root/'src-tauri/icons/icon.ico').is_file()

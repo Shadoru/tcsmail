@@ -442,6 +442,50 @@ mod mailbox_display_tests {
         assert_eq!(display_mailbox_name("Ação"), "Ação");
         assert_eq!(display_mailbox_name("&garbage"), "&garbage");
     }
+
+    #[test]
+    fn mailbox_labels_cover_unicode_and_single_pass_literal_ampersands() {
+        for (raw, expected) in [
+            ("00 - Seguran&AOc-a e Contas", "00 - Segurança e Contas"),
+            ("02 - Jur&AO0-dico", "02 - Jurídico"),
+            ("&ZeVnLIqe-", "日本語"),
+            ("&U,BTFw-", "台北"),
+            ("&2D3eAA-", "😀"),
+            ("&2DTdHg-", "𝄞"),
+            ("&,v8-", "\u{feff}"),
+            ("&,,4-", "\u{fffe}"),
+            ("Literal &-AOc-", "Literal &AOc-"),
+            ("Literal &--", "Literal &-"),
+            ("&AOc=-", "ç"),
+            ("&//4-", "\u{fffe}"),
+            ("&bad&AOc- &AO0-", "&bad&AOc- í"),
+        ] {
+            assert_eq!(display_mailbox_name(raw), expected, "{raw}");
+        }
+    }
+
+    #[test]
+    fn mailbox_labels_preserve_malformed_fragments_and_all_control_ranges() {
+        for raw in [
+            "&garbage",
+            "&bad&AOc-",
+            "&AOf-",
+            "&AAA-",
+            "&AB8-",
+            "&AH8-",
+            "&AIA-",
+            "&AIE-",
+            "&AJ8-",
+            "&2AA-",
+            "&3AA-",
+            "&AA-",
+            "&A-",
+            "&AO c-",
+            "&AOc==-",
+        ] {
+            assert_eq!(display_mailbox_name(raw), raw, "{raw}");
+        }
+    }
 }
 
 pub async fn list_folder_tree(

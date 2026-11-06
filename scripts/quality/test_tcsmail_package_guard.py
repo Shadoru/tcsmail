@@ -43,7 +43,7 @@ class MacBundlePreparationTests(unittest.TestCase):
                 app = bundles / 'macos' / 'TCS Mail.app'
                 (app / 'Contents' / 'MacOS').mkdir(parents=True)
                 (app / 'Contents' / 'MacOS' / 'tcs-mail').write_bytes(b'synthetic executable')
-                dmg = bundles / 'dmg' / 'TCS Mail_0.8.2-rc8.dmg'
+                dmg = bundles / 'dmg' / 'TCS Mail_0.8.3.dmg'
                 dmg.parent.mkdir(parents=True)
                 dmg.write_bytes(b'synthetic dmg')
                 invocations = []
@@ -61,12 +61,13 @@ class MacBundlePreparationTests(unittest.TestCase):
                 args = SimpleNamespace(bundles=str(bundles), kind=kind, label=label, sha='0123456789abcdef')
                 with cwd(root), patch.object(guard.sys, 'platform', 'darwin'), \
                      patch.object(guard.shutil, 'which', return_value='/usr/bin/ditto'), \
-                     patch.object(guard.subprocess, 'run', side_effect=fake_ditto):
+                     patch.object(guard.subprocess, 'run', side_effect=fake_ditto), \
+                     patch.object(guard, 'inspect_native'):
                     guard.bundle(args)
 
                 self.assertEqual(len(invocations), 1)
                 result = root / 'delivery' / label
-                package = result / f'tcsmail-0.8.2-rc8-{label}.zip'
+                package = result / f'tcsmail-0.8.3-{label}.zip'
                 self.assertTrue(package.is_file())
                 with zipfile.ZipFile(package) as z:
                     self.assertEqual(set(z.namelist()), {'TCS Mail.app.zip', dmg.name})
@@ -74,7 +75,7 @@ class MacBundlePreparationTests(unittest.TestCase):
                         self.assertIn('TCS Mail.app/Contents/MacOS/tcs-mail', app_archive.namelist())
                 info = json.loads((result / 'build-info.json').read_text(encoding="utf-8"))
                 self.assertEqual(info['github_sha'], args.sha)
-                self.assertEqual(info['version'], '0.8.2-rc8')
+                self.assertEqual(info['version'], '0.8.3')
                 self.assertEqual({f['kind'] for f in info['files']}, {'app', 'dmg'})
                 digest = hashlib.sha256(package.read_bytes()).hexdigest()
                 self.assertEqual(info['zip_sha256'], digest)
@@ -101,7 +102,7 @@ class MacBundlePreparationTests(unittest.TestCase):
             dmg.write_bytes(b'synthetic dmg')
             args = SimpleNamespace(bundles=str(root/'bundles'), kind='mac_intel', label='macos-intel', sha='test')
             with cwd(root), patch.object(guard.sys, 'platform', 'linux'):
-                with self.assertRaisesRegex(RuntimeError, r'archived by ditto'):
+                with self.assertRaisesRegex(ValueError, r'native macOS runner'):
                     guard.bundle(args)
 
 if __name__ == '__main__':

@@ -2,6 +2,8 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum SecretError {
+    #[error("credential not found")]
+    NotFound,
     #[error("credential backend unavailable: {0}")]
     MissingTool(String),
     #[error("credential backend failed: {0}")]
@@ -27,6 +29,14 @@ impl SecretStore {
 
     pub fn store_password(account_email: &str, password: &str) -> Result<(), SecretError> {
         platform::store(account_email, password)
+    }
+
+    pub fn optional_password(account_email: &str) -> Result<Option<String>, SecretError> {
+        match platform::lookup(account_email) {
+            Ok(value) => Ok(Some(value)),
+            Err(SecretError::NotFound) => Ok(None),
+            Err(error) => Err(error),
+        }
     }
 
     pub fn lookup_password(account_email: &str) -> Result<String, SecretError> {
@@ -94,13 +104,17 @@ mod platform {
             .output()
             .map_err(|e| SecretError::MissingTool(e.to_string()))?;
         if !out.status.success() {
-            return Err(SecretError::Failed(
-                String::from_utf8_lossy(&out.stderr).trim().to_string(),
-            ));
+            if out.status.code() == Some(1) && out.stderr.is_empty() {
+                return Err(SecretError::NotFound);
+            }
+            return Err(SecretError::Failed("credential lookup failed".into()));
         }
-        let value = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        let value = String::from_utf8(out.stdout)
+            .map_err(|_| SecretError::Failed("credential is not UTF-8".into()))?;
+        // secret-tool appends one newline; spaces are part of the password.
+        let value = value.strip_suffix('\n').unwrap_or(&value).to_string();
         if value.is_empty() {
-            Err(SecretError::Failed("credential not found".into()))
+            Err(SecretError::NotFound)
         } else {
             Ok(value)
         }
@@ -138,7 +152,13 @@ mod platform {
 
     pub fn lookup(account: &str) -> Result<String, SecretError> {
         let bytes = generic_password(PasswordOptions::new_generic_password(SERVICE, account))
-            .map_err(|e| SecretError::Failed(e.to_string()))?;
+            .map_err(|e| {
+                if e.code() == -25300 {
+                    SecretError::NotFound
+                } else {
+                    SecretError::Failed(e.to_string())
+                }
+            })?;
         String::from_utf8(bytes)
             .map_err(|e| SecretError::Failed(format!("credential is not UTF-8: {e}")))
     }
@@ -176,7 +196,7 @@ if($Op -eq 'set'){
   $ptr=[Runtime.InteropServices.Marshal]::AllocHGlobal($bytes.Length)
   try {[Runtime.InteropServices.Marshal]::Copy($bytes,0,$ptr,$bytes.Length);$c=New-Object TcsCred+CREDENTIAL;$c.Type=1;$c.TargetName=$target;$c.UserName=$User;$c.CredentialBlobSize=$bytes.Length;$c.CredentialBlob=$ptr;$c.Persist=2;if(-not [TcsCred]::CredWrite([ref]$c,0)){exit 2}} finally {[Runtime.InteropServices.Marshal]::FreeHGlobal($ptr)}
 }elseif($Op -eq 'get'){
-  $p=[IntPtr]::Zero;if(-not [TcsCred]::CredRead($target,1,0,[ref]$p)){exit 3};try{$c=[Runtime.InteropServices.Marshal]::PtrToStructure($p,[type][TcsCred+CREDENTIAL]);$bytes=New-Object byte[] $c.CredentialBlobSize;[Runtime.InteropServices.Marshal]::Copy($c.CredentialBlob,$bytes,0,$bytes.Length);[Console]::Out.Write([Text.Encoding]::Unicode.GetString($bytes))}finally{[TcsCred]::CredFree($p)}
+  $p=[IntPtr]::Zero;if(-not [TcsCred]::CredRead($target,1,0,[ref]$p)){if([Runtime.InteropServices.Marshal]::GetLastWin32Error() -eq 1168){exit 3}else{exit 5}};try{$c=[Runtime.InteropServices.Marshal]::PtrToStructure($p,[type][TcsCred+CREDENTIAL]);$bytes=New-Object byte[] $c.CredentialBlobSize;[Runtime.InteropServices.Marshal]::Copy($c.CredentialBlob,$bytes,0,$bytes.Length);[Console]::Out.Write([Text.Encoding]::Unicode.GetString($bytes))}finally{[TcsCred]::CredFree($p)}
 }elseif($Op -eq 'delete'){if(-not [TcsCred]::CredDelete($target,1,0)){exit 4}}
 "#;
 
@@ -247,11 +267,16 @@ if($Op -eq 'set'){
             .wait_with_output()
             .map_err(|e| SecretError::Failed(e.to_string()))?;
         if !out.status.success() {
-            return Err(SecretError::Failed("credential not found".into()));
+            return Err(if out.status.code() == Some(3) {
+                SecretError::NotFound
+            } else {
+                SecretError::Failed("credential lookup failed".into())
+            });
         }
-        let value = String::from_utf8_lossy(&out.stdout).to_string();
+        let value = String::from_utf8(out.stdout)
+            .map_err(|_| SecretError::Failed("credential is not UTF-8".into()))?;
         if value.is_empty() {
-            Err(SecretError::Failed("credential not found".into()))
+            Err(SecretError::NotFound)
         } else {
             Ok(value)
         }

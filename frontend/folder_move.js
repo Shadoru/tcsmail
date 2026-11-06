@@ -1,31 +1,22 @@
 // SPDX-License-Identifier: MPL-2.0
-// Presentation-only mailbox naming. Never use decoded text for IMAP commands.
-export function decodeMailboxLabel(raw) {
-  return String(raw ?? '').replace(/&([A-Za-z0-9+,]*)-/g, (whole, block) => {
-    if (!block) return '&';
-    try {
-      const b64 = block.replace(/,/g, '/') + '='.repeat((4 - block.length % 4) % 4);
-      const binary = atob(b64);
-      if (!binary.length || binary.length % 2) return whole;
-      const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
-      const value = new TextDecoder('utf-16be', {fatal: true}).decode(bytes);
-      return /[\u0000-\u001f\u007f]/.test(value) ? whole : value;
-    } catch { return whole; }
-  });
-}
+import {decodeMailboxLabel,folderDisplayLabel} from './folder_labels.js';
+// Keep the existing import API for callers and the RC7 regression suite.
+export {decodeMailboxLabel} from './folder_labels.js';
 export function moveFolderChoices(tree) {
   const nodes = Array.isArray(tree) ? tree.filter(x=>x && typeof x.name==='string' && x.name) : [];
   const byName = new Map(nodes.map(f=>[f.name,f]));
   const labelFor = (f, seen=new Set()) => {
     if (seen.has(f.name)) return decodeMailboxLabel(f.name);
-    const here=decodeMailboxLabel(f.display_name||f.name);
-    if (!f.parent || !byName.has(f.parent)) {
-      if (!f.parent && f.delimiter && f.name.includes(f.delimiter))
-        return f.name.split(f.delimiter).map(decodeMailboxLabel).join(' / ');
-      return f.parent ? decodeMailboxLabel(f.parent) + ' / ' + here : here;
+    const here=folderDisplayLabel(f);
+    const split=f.delimiter?f.name.lastIndexOf(f.delimiter):-1;
+    const parent=f.parent||(split>0?f.name.slice(0,split):null);
+    if (!parent) return here;
+    if (!byName.has(parent)) {
+      const prefix=f.delimiter?parent.split(f.delimiter).map(decodeMailboxLabel).join(' / '):decodeMailboxLabel(parent);
+      return prefix + ' / ' + here;
     }
     seen.add(f.name);
-    return labelFor(byName.get(f.parent), seen) + ' / ' + here;
+    return labelFor(byName.get(parent), seen) + ' / ' + here;
   };
   const choices=nodes.filter(f=>f.selectable!==false).map(f=>({value:f.name,label:labelFor(f)}));
   if (!choices.some(f=>f.value.toUpperCase()==='INBOX'))choices.unshift({value:'INBOX',label:'Caixa de entrada'});

@@ -1,6 +1,6 @@
 [package]
 name = "tcs-mail"
-version = "0.8.2-rc8"
+version = "0.8.3"
 edition = "2021"
 rust-version = "1.89"
 license = "MPL-2.0"
@@ -14,7 +14,7 @@ name = "tcs-mail"
 path = "src/main.rs"
 
 [build-dependencies]
-tauri-build = "2.5"
+tauri-build = { version = "2.5", features = [] }
 
 [dependencies]
 tauri = { version = "2.10", features = ["tray-icon"] }

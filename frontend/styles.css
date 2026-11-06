@@ -911,3 +911,54 @@ html[data-theme="dark"] .sendOptionsPopover .selectButton{background:#242a30!imp
 .firstRunThemePreview[data-preview-theme="graphite"]{--preview-side:#293039;--preview-list:#eef0f2;--preview-reader:#ffffff}
 @media(prefers-color-scheme:dark){.firstRunThemePreview[data-preview-theme="system"]{--preview-side:#1d2125;--preview-list:#181c20;--preview-reader:#15181b}}
 @media(max-width:680px){.firstRunBenefits{grid-template-columns:1fr}.firstRunThemeGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+/* RC8-fix1: intrinsic sizing shared by GTK, WebView2 and WKWebView. */
+[hidden] { display:none!important }
+#settingsSearch { width:100%; min-width:0; padding:8px; border:1px solid var(--border); border-radius:8px; background:var(--surface); margin-bottom:8px }
+.modal { min-width:0; max-width:calc(100vw - 24px); max-height:calc(100dvh - 24px) }
+.modal.resizable { min-width:min(520px,calc(100vw - 24px)); min-height:min(380px,calc(100dvh - 24px)) }
+.settingsModal.resizable { width:min(1120px,96vw); min-width:min(720px,96vw); min-height:0 }
+.settingsModal .modalBody { display:flex; flex-direction:column; min-height:0; overflow:hidden }
+.settingsModal .settingsLayout { flex:1; height:min(76dvh,800px); min-height:0; grid-template-columns:minmax(150px,210px) minmax(0,1fr); overflow:hidden }
+.settingsLayout #settingsPanel { min-width:0; padding:0 12px 12px 20px; overflow:auto; scrollbar-gutter:stable }
+.settingsLayout nav { min-width:0; overflow:auto; scrollbar-gutter:stable }
+.settingsLayout h2 { margin-top:8px }.settingsNavGroup { white-space:normal; overflow-wrap:anywhere }
+.settingsLayout nav button,.settingsSectionTabs button { white-space:normal; overflow-wrap:anywhere }
+.settingsLayout .inlineForm { align-items:flex-end; gap:10px }.settingsLayout .inlineForm>* { flex:1 1 180px; min-width:0; max-width:100% }
+.settingsLayout .inlineForm>button { flex:0 1 auto; align-self:center }
+.field,.field input,.field textarea,.field select,.selectShell { min-width:0; max-width:100% }
+.field input,.field select,.field textarea { width:100% }
+.selectShell .selectButton { max-width:100%; min-width:0; width:100% }
+.selectShell .selectButton>span { display:block; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.selectShell .selectButton>i { flex:0 0 auto }
+.selectPopup button,.selectPopup.tcsFloatingPopup button { white-space:normal; overflow-wrap:anywhere; line-height:1.45 }
+.settingsRow,.ragSourceRow { min-width:0; flex-wrap:wrap; align-items:center }
+.settingsRow>span,.ragSourceRow>span { display:flex; flex:1 1 180px; flex-direction:column; min-width:0; overflow-wrap:anywhere; gap:5px }
+.settingsRow>div { flex-wrap:wrap; min-width:0 }.settingsRow small,.ragSourceRow small { display:block; line-height:1.5 }
+.settingsLayout button,.modalActions button,.pageHead button { white-space:normal; overflow-wrap:anywhere; line-height:1.4 }
+.settingsLayout .diagnosticBox,.settingsLayout pre,.diagnosticResult { max-width:100%; white-space:pre-wrap; overflow-wrap:anywhere }
+.settingsLayout .settingsToggle { align-items:flex-start; line-height:1.5 }.settingsToggle input[type=checkbox] { flex:0 0 auto; margin-top:4px }
+.settingsDetails { padding:14px 0; border-block-end:1px solid var(--border); margin:8px 0 }
+.settingsDetails>summary { cursor:pointer; font-weight:650; padding:5px 0; line-height:1.5 }
+.settingsActionRow { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:12px 0 }
+.settingsActionRow>* { min-width:0; max-width:100% }
+.settingsStickyActions { position:sticky; bottom:-12px; background:var(--surface); border-top:1px solid var(--border); display:flex; flex-wrap:wrap; gap:12px; align-items:center; padding:12px 0; margin-top:14px; z-index:2 }
+.aiSetupCard { padding:18px; border:1px solid var(--border); border-radius:12px; margin:16px 0; min-width:0 }
+.aiSetupCard h3 { margin-top:0; font-size:1.05rem }
+.aiServiceGrid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(145px,100%),1fr)); gap:8px; margin:14px 0 }
+.aiServiceCard { display:flex; flex-direction:column; gap:6px; border:1px solid var(--border); border-radius:10px; padding:12px; min-width:0 }
+.aiServiceCard small { color:var(--muted); overflow-wrap:anywhere }
+.aiServiceCard[aria-pressed=true] { border:2px solid var(--accent); background:color-mix(in srgb,var(--accent) 10%,var(--surface)) }
+.aiSecretRow { display:flex; flex-wrap:wrap; gap:10px; align-items:center }.aiSecretRow>.field { flex:1 1 200px }.aiSecretRow>button { flex:0 1 auto }
+.pageHead { flex-wrap:wrap }.pageHead>div { min-width:0; max-width:100%; overflow-wrap:anywhere }.pageHead>div:last-child { display:flex; flex-wrap:wrap; gap:6px }
+.readerActions,.readerPrimary,.readerSecondary,.readerMode { flex-wrap:wrap; min-width:0 }
+.attachments,.attachmentActions { min-width:0; overflow-wrap:anywhere; max-width:100% }
+.modal>header strong,.modalBody p,.modalBody small { overflow-wrap:anywhere }
+.modalActions { flex-wrap:wrap }.shortcutEditor .settingsRow input { min-width:0; max-width:100%; flex:0 1 200px }
+.calendarPage .pageHead>div { flex-wrap:wrap }.weekView,.monthGrid { min-width:0; overflow-wrap:anywhere }
+button:focus-visible,summary:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible { outline:2px solid var(--accent); outline-offset:2px }
+@media(max-width:760px) {
+ .settingsModal.resizable { min-width:0; width:96vw }
+ .settingsModal .settingsLayout { grid-template-columns:minmax(115px,30%) minmax(0,1fr) }
+ .settingsLayout #settingsPanel { padding-left:10px; padding-right:4px }.aiSetupCard { padding:12px }
+ .settingsLayout nav { padding-right:6px }.settingsLayout nav button { padding:8px 5px }
+}

@@ -1,43 +1,78 @@
-name: IMAP 0.12/0.17 cross-platform validation
+name: IMAP current cross-platform validation
+
 on:
   workflow_dispatch:
+
+permissions:
+  contents: read
+
 jobs:
   verify:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, windows-latest, macos-latest]
+        include:
+          - { os: ubuntu-24.04, target: x86_64-unknown-linux-gnu }
+          - { os: windows-2022, target: x86_64-pc-windows-msvc }
+          - { os: macos-15-intel, target: x86_64-apple-darwin }
+          - { os: macos-15, target: aarch64-apple-darwin }
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
     env:
       PYTHONUTF8: '1'
     steps:
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
+          package-manager-cache: false
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.99.0
+          components: clippy, rustfmt
+          targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: tcsmail-imap-v083-${{ matrix.target }}
       - name: Tauri Linux prerequisites
         if: runner.os == 'Linux'
         run: |
+          set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf
-      - name: IMAP contract gate (portable Python)
-        run: python scripts/quality/verify-imap-epoch-routes.py
-      - name: Frontend sync and palette regression
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf appstream rpm rpm2cpio cpio libarchive-tools libsecret-tools
+      - name: Current source, IMAP epoch routes and theme contrast
+        # H5 exact call counts and obsolete source regexes remain in scripts/quality
+        # as historical contracts, per AGENTS.md; current behavioral gates replace them.
         run: |
-          node scripts/quality/h5-imapfix2-sync-contract.mjs
+          set -euo pipefail
+          python scripts/build-0.8.3.py --gates-only
+          python scripts/quality/verify-imap-epoch-routes.py
           python scripts/quality/h5-imapfix2-theme-contrast.py
-      - name: IMAP 29 restored source gates
-        run: python scripts/quality/h5-imapfix2-portable-gates.py
-      - name: Microsoft OAuth contract checks (no live secrets)
-        run: node scripts/verify-ms-oauth.mjs
-      - name: Pinned workspace compilation
-        run: cargo check --locked --workspace --all-targets
-      - name: Rust unit and TCP protocol fixtures
-        run: cargo test --locked --workspace --lib
-      - name: Release executable compilation
-        run: cargo build --release --locked -p tcs-mail --bin tcs-mail
+      - name: Pinned native Rust formatting, compilation, tests and Clippy
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+          cargo check --locked --workspace --all-targets --target '${{ matrix.target }}'
+          cargo test --locked --workspace --target '${{ matrix.target }}'
+          cargo clippy --locked --workspace --all-targets --target '${{ matrix.target }}' -- -D warnings
+      - name: Native release executable compilation
+        run: cargo build --release --locked -p tcs-mail --bin tcs-mail --target '${{ matrix.target }}'
+      - name: Retain source gate evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: imap-evidence-${{ matrix.target }}-${{ github.run_number }}
+          path: |
+            .build-v083/**/result.json
+            .build-v083/**/*.log
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 14

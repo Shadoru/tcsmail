@@ -5,8 +5,10 @@
     clippy::needless_borrows_for_generic_args
 )]
 
+mod analysis_cache;
 pub mod automation;
 pub mod config;
+mod extraction;
 pub mod migration;
 pub mod policy;
 pub mod provider;

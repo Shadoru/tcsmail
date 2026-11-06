@@ -1,5 +1,6 @@
 
 const openSelectShells = new Set();
+let selectSequence=0;
 function escHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 
 function enhanceSelect(select){
@@ -10,12 +11,18 @@ function enhanceSelect(select){
  select.classList.add('nativeSelectSource');
  const button=document.createElement('button');button.type='button';button.className='selectButton';button.setAttribute('aria-haspopup','listbox');button.setAttribute('aria-expanded','false');
  const popup=document.createElement('div');popup.className='selectPopup hidden';popup.setAttribute('role','listbox');
+ popup.id='tcs-select-popup-'+(++selectSequence);button.setAttribute('aria-controls',popup.id);
  shell.append(button,popup);
  let active=-1;
  const enabledOptions=()=>[...select.options].filter(o=>!o.disabled);
  const refresh=()=>{
    const opt=select.selectedOptions?.[0]||select.options[select.selectedIndex]||select.options[0];
    button.innerHTML=`<span>${escHtml(opt?.textContent||'')}</span><i>▾</i>`;
+   const label=select.closest('label')?.querySelector('span')?.textContent||select.getAttribute('aria-label')||'';
+   button.setAttribute('aria-label',[label,opt?.textContent||''].filter(Boolean).join(': '));
+   button.title=opt?.textContent||'';
+   const skip=select.hasAttribute('data-i18n-skip')||!!select.closest('[data-i18n-skip]');
+   button.toggleAttribute('data-i18n-skip',skip);popup.toggleAttribute('data-i18n-skip',skip);
    button.disabled=select.disabled;
    popup.innerHTML=enabledOptions().map((o,i)=>`<button type="button" role="option" aria-selected="${o.selected}" data-select-i="${i}" class="${o.selected?'active':''}">${escHtml(o.textContent)}</button>`).join('');
    active=Math.max(0,enabledOptions().findIndex(o=>o.selected));
@@ -39,8 +46,7 @@ function enhanceSelect(select){
    if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();if(popup.classList.contains('hidden'))open();active=Math.max(0,Math.min(opts.length-1,active+(e.key==='ArrowDown'?1:-1)));popup.querySelectorAll('[data-select-i]').forEach((x,i)=>x.classList.toggle('keyboardActive',i===active));popup.querySelector(`[data-select-i="${active}"]`)?.scrollIntoView({block:'nearest'})}
    else if((e.key==='Enter'||e.key===' ')&&!popup.classList.contains('hidden')){e.preventDefault();choose(active)}
    else if(e.key==='Escape'){e.preventDefault();close()}
-   else if(e.key==='Home'){e.preventDefault();active=0}
-   else if(e.key==='End'){e.preventDefault();active=opts.length-1}
+   else if(e.key==='Home'||e.key==='End'){e.preventDefault();if(popup.classList.contains('hidden'))open();active=e.key==='Home'?0:opts.length-1;popup.querySelectorAll('[data-select-i]').forEach((x,i)=>x.classList.toggle('keyboardActive',i===active));popup.querySelector(`[data-select-i="${active}"]`)?.scrollIntoView({block:'nearest'})}
  };
  popup.onclick=e=>{const item=e.target.closest('[data-select-i]');if(!item)return;e.preventDefault();e.stopPropagation();choose(Number(item.dataset.selectI))};
  select.addEventListener('change',refresh);

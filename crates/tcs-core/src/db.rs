@@ -59,10 +59,8 @@ impl Database {
         let old: i64 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
 
         if existed && old < SCHEMA_VERSION {
-            conn.execute_batch("PRAGMA wal_checkpoint(FULL);")?;
             drop(conn);
-            self.backup()
-                .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
+            self.backup()?;
         } else {
             drop(conn);
         }
@@ -163,11 +161,13 @@ impl Database {
         Ok(false)
     }
 
-    fn backup(&self) -> std::io::Result<()> {
+    fn backup(&self) -> rusqlite::Result<()> {
         let stamp = Local::now().format("%Y%m%d-%H%M%S");
         let backup = self.path.with_file_name(format!("mail.db.backup-{stamp}"));
-        fs::copy(&self.path, backup)?;
-        Ok(())
+        // Include committed WAL pages even when an older reader prevents a
+        // checkpoint. A failed snapshot aborts migration instead of copying .db.
+        self.conn()?
+            .backup(rusqlite::DatabaseName::Main, backup, None)
     }
 
     pub fn get_sync_state(
@@ -940,6 +940,77 @@ impl Database {
 mod tests {
     use super::*;
     use crate::models::Template;
+
+    #[test]
+    fn migration_backup_includes_committed_wal_with_an_older_reader() {
+        let directory =
+            std::env::temp_dir().join(format!("tcs-db-backup-{}", uuid::Uuid::new_v4()));
+        let path = directory.join("synthetic.db");
+        {
+            let db = Database::open(&path).unwrap();
+            let writer = db.connection().unwrap();
+            writer.pragma_update(None, "wal_autocheckpoint", 0).unwrap();
+            writer.execute_batch("CREATE TABLE backup_probe(value BLOB); PRAGMA user_version=9; PRAGMA wal_checkpoint(TRUNCATE);").unwrap();
+            let reader = db.connection().unwrap();
+            reader.execute_batch("BEGIN").unwrap();
+            assert_eq!(
+                reader
+                    .query_row("SELECT COUNT(*) FROM backup_probe", [], |r| r
+                        .get::<_, i64>(0))
+                    .unwrap(),
+                0
+            );
+            writer
+                .execute("INSERT INTO backup_probe VALUES(x'0080ff')", [])
+                .unwrap();
+            let (_, logged, checkpointed) = writer
+                .query_row("PRAGMA wal_checkpoint(PASSIVE)", [], |r| {
+                    Ok((
+                        r.get::<_, i64>(0)?,
+                        r.get::<_, i64>(1)?,
+                        r.get::<_, i64>(2)?,
+                    ))
+                })
+                .unwrap();
+            assert!(
+                logged > checkpointed,
+                "test requires committed data still in WAL"
+            );
+            Database::open(&path).unwrap();
+            let backups = fs::read_dir(&directory)
+                .unwrap()
+                .map(|p| p.unwrap().path())
+                .filter(|p| {
+                    p.file_name()
+                        .unwrap()
+                        .to_string_lossy()
+                        .starts_with("mail.db.backup-")
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(backups.len(), 1, "legacy backup filename is preserved");
+            let backup = Connection::open(&backups[0]).unwrap();
+            assert_eq!(
+                backup
+                    .query_row("SELECT value FROM backup_probe", [], |r| r
+                        .get::<_, Vec<u8>>(0))
+                    .unwrap(),
+                vec![0, 128, 255]
+            );
+            assert_eq!(
+                backup
+                    .query_row("PRAGMA integrity_check", [], |r| r.get::<_, String>(0))
+                    .unwrap(),
+                "ok"
+            );
+            assert_eq!(
+                backup
+                    .pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
+                    .unwrap(),
+                9
+            );
+        }
+        fs::remove_dir_all(directory).unwrap();
+    }
 
     #[test]
     fn template_crud_refresh_contract() {

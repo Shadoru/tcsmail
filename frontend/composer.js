@@ -1,10 +1,55 @@
 import {workspaceHtml,bindAiWorkspace,authorizeAiMessage} from './ai_workspace.js';
 import {composerQuery,composerQueryAll,recipientNode} from './composer_lookup.js';
-import {invoke,$,$$,esc,modal,formatBytes,fromLocalInput,toast,confirmDialog,promptDialog,choiceDialog} from './lib.js';
+import {invoke,$,$$,esc,modal,formatBytes,fromLocalInput,toast,confirmDialog,promptDialog,choiceDialog,sanitizeComposerHtml} from './lib.js';
 import {matches as shortcutMatches,tooltip as shortcutTooltip} from './shortcuts.js';
 import {inspectMessageSafety, safeEmailDomain, validateOutgoingTimes} from './send_safety.js';
 import {parseRecipientToken,parseRecipientList,formatRecipient,recipientListValue,recipientEmails,validRecipientCount,mergeRecipient} from './recipients.js';
 import {execEditorCommand,selectedCell,insertTableAtSelection,tableAddRow,tableDeleteRow,tableAddColumn,tableDeleteColumn,tableMergeRight,tableMergeDown,tableSetAlign,tableTabNavigate,stripUnsafePaste} from './rich_editor.js';
+
+let systemFontsPromise=null;
+function cachedSystemFonts(){
+ if(!systemFontsPromise){
+  // Share an in-flight request between editors in this WebView. A failed
+  // lookup falls back for these callers, then permits a later retry.
+  systemFontsPromise=Promise.resolve().then(()=>invoke('list_system_fonts')).then(fonts=>{
+   if(!Array.isArray(fonts))throw new Error('Invalid font list');
+   const valid=[...new Set(fonts.filter(f=>typeof f==='string'&&f.trim()).map(f=>f.trim()))];
+   if(!valid.length)throw new Error('Empty font list');
+   return valid;
+  }).catch(()=>{systemFontsPromise=null;return ['Sans','Serif','Monospace']});
+ }
+ return systemFontsPromise;
+}
+async function loadComposerPreferences(accountId,settings){
+ const scoped=async(key,fallback)=>{const v=await invoke('get_setting_value',{key:`account.${accountId}.${key}`}).catch(()=>null);return v==null?fallback:v};
+ const inherited=async(key,fallback)=>{const own=await invoke('get_setting_value',{key:`account.${accountId}.composition.${key}`}).catch(()=>null);if(own!=null)return own;return await invoke('get_setting_value',{key:`composition.${key}`}).catch(()=>null)??fallback};
+ // Independent keys can overlap; each key retains its own account/global fallback.
+ const [base,safetyValues,recovery]=await Promise.all([
+  Promise.all([
+   scoped('composition.default_font',settings.composeFont||'Sans'),
+   scoped('composition.default_font_size',settings.composeSize||'11'),
+   scoped('composition.undo_seconds',settings.composeUndo||'10'),
+   scoped('composition.spellcheck',String(settings.composeSpellcheck!==false)),
+   scoped('composition.request_receipt',String(!!settings.requestReceiptDefault)),
+   scoped('composition.default_format',settings.composeFormat||'html')
+  ]),
+  Promise.all([['safety_attachment','true'],['safety_external','false'],['safety_internal_domains',''],['safety_domain_hints','false'],['safety_reply_all','false'],['safety_local_links','true'],['safety_review','false']].map(([key,fallback])=>inherited(key,fallback))),
+  Promise.all([['recovery','true'],['version_history','false'],['confirm_discard','true'],['drag_files','true'],['paste_images','true']].map(([key,fallback])=>inherited(key,fallback)))
+ ]);
+ const [font,size,undo,spell,receipt,format]=base;
+ const [attachment,external,domains,domainHints,replyAll,localLinks,finalReview]=safetyValues.map(String);
+ return {
+  composePrefs:{font,size,undo,spell:spell==='true',receipt:receipt==='true',format},
+  safety:{attachment:attachment==='true',external:external==='true',internalDomains:domains.split(/[;,\s]+/).map(x=>x.trim().toLowerCase()).filter(Boolean),domainHints:domainHints==='true',replyAll:replyAll==='true',localLinks:localLinks==='true',finalReview:finalReview==='true'},
+  r13:{recovery:recovery[0]==='true',history:recovery[1]==='true',confirmDiscard:recovery[2]==='true',drag:recovery[3]==='true',paste:recovery[4]==='true'}
+ };
+}
+function deferComposerEstimate(update,delay=180){
+ let timer=null;
+ const schedule=()=>{clearTimeout(timer);timer=setTimeout(()=>{timer=null;update()},delay)};
+ schedule.cancel=()=>{clearTimeout(timer);timer=null};
+ return schedule;
+}
 
 function selectionIn(editor){const s=getSelection();if(!s||!s.rangeCount)return null;const r=s.getRangeAt(0);return editor.contains(r.commonAncestorContainer)?r:null}
 function closestFormattingNode(editor,range,tag){let n=range.commonAncestorContainer.nodeType===Node.ELEMENT_NODE?range.commonAncestorContainer:range.commonAncestorContainer.parentElement;tag=tag.toLowerCase();while(n&&n!==editor){if(n.tagName?.toLowerCase()===tag)return n;n=n.parentElement}return null}
@@ -106,21 +151,9 @@ export async function openComposer(ctx,seed={},options={}){
  const $$=(selector,scope=document)=>composerQueryAll(selector,scope,!!options.inlineHost);
  let accountId=seed.accountId??ctx.state.account??ctx.state.boot.default_account_id??ctx.state.boot.accounts[0]?.id;
  if(!accountId){toast('Cadastre uma conta antes de redigir.');ctx.openSettings('accounts');return}
- const scoped=async(key,fallback)=>{const v=await invoke('get_setting_value',{key:`account.${accountId}.${key}`}).catch(()=>null);return v==null?fallback:v};
- const composePrefs={
-   font:await scoped('composition.default_font',ctx.state.boot.settings.composeFont||'Sans'),
-   size:await scoped('composition.default_font_size',ctx.state.boot.settings.composeSize||'11'),
-   undo:await scoped('composition.undo_seconds',ctx.state.boot.settings.composeUndo||'10'),
-   spell:(await scoped('composition.spellcheck',String(ctx.state.boot.settings.composeSpellcheck!==false)))==='true',
-   receipt:(await scoped('composition.request_receipt',String(!!ctx.state.boot.settings.requestReceiptDefault)))==='true',
-   format:await scoped('composition.default_format',ctx.state.boot.settings.composeFormat||'html')
- };
- const r13Pref=async(key,defaultValue)=>{const accountValue=await invoke('get_setting_value',{key:`account.${accountId}.composition.${key}`}).catch(()=>null);if(accountValue!=null)return accountValue;return await invoke('get_setting_value',{key:`composition.${key}`}).catch(()=>null)??defaultValue};
- const safetyPref=async(key,fallback)=>String(await r13Pref(key,fallback));
- const safety={attachment:(await safetyPref('safety_attachment','true'))==='true',external:(await safetyPref('safety_external','false'))==='true',internalDomains:(await safetyPref('safety_internal_domains','')).split(/[;,\s]+/).map(x=>x.trim().toLowerCase()).filter(Boolean),domainHints:(await safetyPref('safety_domain_hints','false'))==='true',replyAll:(await safetyPref('safety_reply_all','false'))==='true',localLinks:(await safetyPref('safety_local_links','true'))==='true',finalReview:(await safetyPref('safety_review','false'))==='true'};
- const r13={recovery:(await r13Pref('recovery','true'))==='true',history:(await r13Pref('version_history','false'))==='true',confirmDiscard:(await r13Pref('confirm_discard','true'))==='true',drag:(await r13Pref('drag_files','true'))==='true',paste:(await r13Pref('paste_images','true'))==='true'};
- const [idsAll,initialSigs,templatesAll,systemFonts]=await Promise.all([
-   invoke('list_identities',{accountId}).catch(()=>[]),invoke('list_signatures',{accountId}).catch(()=>[]),invoke('list_templates').catch(()=>[]),invoke('list_system_fonts').catch(()=>[])
+ const [{composePrefs,safety,r13},idsAll,initialSigs,templatesAll,systemFonts]=await Promise.all([
+   loadComposerPreferences(accountId,ctx.state.boot.settings),
+   invoke('list_identities',{accountId}).catch(()=>[]),invoke('list_signatures',{accountId}).catch(()=>[]),invoke('list_templates').catch(()=>[]),cachedSystemFonts()
  ]);
  const identityMeta=async(id)=>{if(!id)return{};const raw=await invoke('get_setting_value',{key:`identity.${id}.meta`}).catch(()=>null);try{return raw?JSON.parse(raw):{}}catch{return{}}};
  const templates=[];for(const t of templatesAll){const raw=await invoke('get_setting_value',{key:`template.${t.id}.account_id`}).catch(()=>null);const aid=raw==null||raw===''?null:Number(raw);if(aid==null||aid===Number(accountId))templates.push({...t,_accountId:aid})}
@@ -129,7 +162,7 @@ export async function openComposer(ctx,seed={},options={}){
  let account=ctx.state.boot.accounts.find(a=>a.id===accountId);
  const accountMetaRaw=await invoke('get_setting_value',{key:`account.${accountId}.identity.meta`}).catch(()=>null);let accountMeta={};try{accountMeta=accountMetaRaw?JSON.parse(accountMetaRaw):{}}catch{accountMeta={}}
  let senders=[{id:null,name:accountMeta.display_name||account?.email,email:account?.email,signatureId:accountMeta.signature_new_id||null,_meta:accountMeta},...ids.map(i=>({id:i.id,name:i.name,email:i.email,signatureId:i.signature_id,isDefault:i.is_default,_meta:i._meta||{}}))];const senderById=id=>senders.find(x=>String(x.id??'')===String(id??''))||senders[0];
- const draftId=seed.draftId||crypto.randomUUID();const existingWorkKey=`composer:${draftId}`;if(seed.draftId&&ctx.state.workspace?.get?.(existingWorkKey)){ctx.workspaceRestore?.(existingWorkKey);return}let dirty=false,attachments=[];let autoSaveTimer,remoteDraftTimer,saveSoonTimer=null,remoteSoonTimer=null,selectionHandler=null,shortcutHandler=null;let closeGuard=async()=>true;
+ const draftId=seed.draftId||crypto.randomUUID();const existingWorkKey=`composer:${draftId}`;if(seed.draftId&&ctx.state.workspace?.get?.(existingWorkKey)){ctx.workspaceRestore?.(existingWorkKey);return}let dirty=false,attachments=[];let autoSaveTimer,remoteDraftTimer,saveSoonTimer=null,remoteSoonTimer=null,selectionHandler=null,shortcutHandler=null,scheduleWordCount=null;let closeGuard=async()=>true;
  const accountChoicePrefix='__account__:';const extraAccounts=ctx.state.boot.accounts.filter(a=>Number(a.id)!==Number(accountId));
  const defaultIdentity=seed.identityId??ids.find(i=>i.is_default)?.id??null; const useCustomSender=!!seed.customFromEmail; const senderOptions=senders.map((s,i)=>`<option value="${s.id??''}" ${!useCustomSender&&defaultIdentity===s.id?'selected':''}>${esc(s.name)} &lt;${esc(s.email)}&gt;</option>`).join('')+extraAccounts.map(a=>`<option value="${accountChoicePrefix}${a.id}">Trocar para ${esc(a.name||a.email)} &lt;${esc(a.email)}&gt;</option>`).join('')+`<option value="__custom__" ${useCustomSender?'selected':''}>Personalizar o endereço do remetente…</option>`;
  const templateOptions=['<option value="">Template…</option>',...templates.map(t=>`<option value="${t.id}">${esc(t.name)}</option>`)].join('');
@@ -178,7 +211,7 @@ export async function openComposer(ctx,seed={},options={}){
   </div>
   <div id="composerError" class="error"></div>
   <footer class="composerFooter"><span id="draftStatus" role="status" aria-live="polite">Rascunho local</span><div class="composerFooterActions">${options.nativeWindow?`<button type="button" id="returnToReaderPanel" class="returnToReaderPanel" data-reattach-panel title="Mover esta edição para a terceira coluna do TCS Mail" aria-label="Mover para o painel de leitura"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M10 4v16M16 9l-4 3 4 3"/></svg><span>Mover para o painel de leitura</span></button>`:''}<button id="discard">Descartar</button><button id="sendBtn" class="primary" title="${shortcutTooltip('send',ctx.state.boot.settings)}">Enviar</button></div></footer>
- </div>`,{wide:true,resizable:true,persistKey:options.nativeWindow?'composer-native':'composer',embedded:!!options.inlineHost,embeddedHost:options.inlineHost||null,closeOnBackdrop:false,beforeClose:()=>closeGuard(),onClose:()=>{resizeGrip?.remove();window.removeEventListener('scroll',positionGrip,true);window.removeEventListener('resize',positionGrip);clearInterval(autoSaveTimer);clearInterval(remoteDraftTimer);clearTimeout(saveSoonTimer);clearTimeout(remoteSoonTimer);if(selectionHandler)document.removeEventListener('selectionchange',selectionHandler);if(shortcutHandler)window.removeEventListener('tcs-shortcuts-changed',shortcutHandler);if(typeof toolbarOutsideHandler!=='undefined')document.removeEventListener('pointerdown',toolbarOutsideHandler);clearTimeout(toolbarLeaveTimer);clearFind();findOverlay.remove();window.removeEventListener('resize',paintMatches);window.removeEventListener('scroll',paintMatches,true);ctx.workspaceRemove?.(workKey);ctx.refreshLocalDrafts?.().then(()=>{if(ctx.state.folder===ctx.state.roles?.drafts||ctx.state.folder==='__DRAFTS')ctx.goMail?.(ctx.state.folder)}).catch(()=>{});options.onNativeClose?.();options.onClosed?.(draftId)}});
+ </div>`,{wide:true,resizable:true,persistKey:options.nativeWindow?'composer-native':'composer',embedded:!!options.inlineHost,embeddedHost:options.inlineHost||null,closeOnBackdrop:false,beforeClose:()=>closeGuard(),onClose:()=>{scheduleWordCount?.cancel();resizeGrip?.remove();window.removeEventListener('scroll',positionGrip,true);window.removeEventListener('resize',positionGrip);clearInterval(autoSaveTimer);clearInterval(remoteDraftTimer);clearTimeout(saveSoonTimer);clearTimeout(remoteSoonTimer);if(selectionHandler)document.removeEventListener('selectionchange',selectionHandler);if(shortcutHandler)window.removeEventListener('tcs-shortcuts-changed',shortcutHandler);if(typeof toolbarOutsideHandler!=='undefined')document.removeEventListener('pointerdown',toolbarOutsideHandler);clearTimeout(toolbarLeaveTimer);clearFind();findOverlay.remove();window.removeEventListener('resize',paintMatches);window.removeEventListener('scroll',paintMatches,true);ctx.workspaceRemove?.(workKey);ctx.refreshLocalDrafts?.().then(()=>{if(ctx.state.folder===ctx.state.roles?.drafts||ctx.state.folder==='__DRAFTS')ctx.goMail?.(ctx.state.folder)}).catch(()=>{});options.onNativeClose?.();options.onClosed?.(draftId)}});
  // Assign globally unique IDs to all controls of embedded composers. This prevents
  // cross-draft lookups, label collisions and accidental keyboard focus transfers.
  if(options.inlineHost){
@@ -239,7 +272,7 @@ export async function openComposer(ctx,seed={},options={}){
    const cell=selectedCell(editor),tableTools=$('#tableTools',root);
    tableTools?.classList.toggle('hidden',!cell);
    const sel=getSelection();let node=sel?.rangeCount?sel.getRangeAt(0).commonAncestorContainer:null;if(node?.nodeType!==1)node=node?.parentElement;const img=node?.closest?.('img.inlineComposeImage')||null;activeInlineImage=img&&editor.contains(img)?img:null;editor.querySelectorAll('.tcsImageSelected').forEach(x=>x.classList.remove('tcsImageSelected'));activeInlineImage?.classList.add('tcsImageSelected');$('#imageTools',root)?.classList.toggle('hidden',!activeInlineImage);positionGrip()
- };if(seed.restoredLocalDraft)$('#draftStatus',root).textContent=seed.draftDirty?'Rascunho salvo localmente · sincronização pendente':'Rascunho sincronizado';if(seed.htmlBody)editor.innerHTML=seed.htmlBody;
+ };if(seed.restoredLocalDraft)$('#draftStatus',root).textContent=seed.draftDirty?'Rascunho salvo localmente · sincronização pendente':'Rascunho sincronizado';if(seed.htmlBody)editor.innerHTML=sanitizeComposerHtml(seed.htmlBody);
  const quotedCidImages=()=>[...editor.querySelectorAll('img[src]')].filter(img=>/^cid:/i.test(String(img.getAttribute('src')||'')));
  if(seed.sourceMessageId&&quotedCidImages().length){try{const imported=await invoke('import_received_inline_images',{messageId:Number(seed.sourceMessageId),draftId:String(draftId)});for(const item of imported||[]){const cid=String(item.content_id||'').replace(/^<|>$/g,'');if(!cid)continue;const preview=await invoke('inline_image_preview',{handleId:item.id}).catch(()=> '');if(!preview)continue;for(const img of quotedCidImages()){const raw=decodeURIComponent(String(img.getAttribute('src')||'').slice(4)).replace(/^<|>$/g,'');if(raw!==cid)continue;img.dataset.inlineCid=cid;img.dataset.handleId=item.id;img.classList.add('inlineComposeImage');img.setAttribute('src',preview)}}}catch(e){console.warn('Não foi possível preparar imagens inline da mensagem original:',e)}}
  const initialFormat=seed.composeFormat||(seed.inReplyTo?(seed.htmlBody?'html':'plain'):composePrefs.format);$('#composeFormatMode',root).value=initialFormat;editor.dataset.composeFormat=initialFormat;$('#fontFamily',root).value=composePrefs.font;$('#undoSeconds',root).value=String(seed.undoSeconds||composePrefs.undo);const recipientFields={to:installRecipientField(root,'cTo','cToSuggest',seed.to||''),cc:installRecipientField(root,'cCc','cCcSuggest',seed.cc||''),bcc:installRecipientField(root,'cBcc','cBccSuggest',seed.bcc||'')};
@@ -248,8 +281,8 @@ export async function openComposer(ctx,seed={},options={}){
  const toolbarMenus=$$('.toolbarMenu',root);let toolbarLeaveTimer=null;const closeToolbarMenus=except=>toolbarMenus.forEach(d=>{if(d!==except)d.open=false});const toolbarOutsideHandler=e=>{if(!e.target.closest('.toolbarMenu'))closeToolbarMenus(null)};toolbarMenus.forEach(d=>{d.addEventListener('toggle',()=>{if(d.open)closeToolbarMenus(d)});d.addEventListener('pointerenter',()=>clearTimeout(toolbarLeaveTimer));d.addEventListener('pointerleave',()=>{clearTimeout(toolbarLeaveTimer);toolbarLeaveTimer=setTimeout(()=>{d.open=false},180)});d.querySelector('.toolbarPopover')?.addEventListener('click',e=>{if(e.target.closest('button')&&!e.target.closest('#insertTableManual'))setTimeout(()=>{d.open=false},0)})});document.addEventListener('pointerdown',toolbarOutsideHandler);
  const serializableHtml=()=>{const clone=editor.cloneNode(true);clone.querySelectorAll('.tcsImageSelected').forEach(el=>el.classList.remove('tcsImageSelected'));clone.querySelectorAll('img[data-inline-cid]').forEach(img=>{img.setAttribute('src',`cid:${img.dataset.inlineCid}`);img.removeAttribute('data-handle-id');img.removeAttribute('data-inline-cid');img.classList.remove('inlineComposeImage','tcsImageSelected')});return clone.innerHTML};const snapshot=()=>JSON.stringify({to:recipientFields.to.commit(),cc:recipientFields.cc.commit(),bcc:recipientFields.bcc.commit(),subject:$('#cSubject',root).value,html:serializableHtml(),text:textVersion(editor),identityId:$('#cFrom',root)?.value==='__custom__'?null:($('#cFrom',root)?.value||null),customFromName:$('#customFromName',root)?.value.trim()||'',customFromEmail:$('#customFromEmail',root)?.value.trim()||'',requestReadReceipt:$('#receipt',root).checked,followEnabled:$('#follow',root).checked,followAt:$('#followAt',root).value||'',scheduleEnabled:$('#schedule',root).checked,sendAt:$('#sendAt',root).value||'',undoSeconds:Number($('#undoSeconds',root).value)||10,ccVisible:$('#ccBlock',root).classList.contains('show'),bccVisible:$('#bccBlock',root).classList.contains('show'),signatureId:signatureSelect.value!=='auto'&&signatureSelect.value!=='none'?Number(signatureSelect.value):null,noSignature:signatureSelect.value==='none',inReplyTo:seed.inReplyTo||null,references:seed.references||null,sourceMessageId:seed.sourceMessageId||null,composeFormat:$('#composeFormatMode',root).value});
  // R12: independent inspection actions do not alter the draft or its CID attachments.
- const updateWordCount=()=>{const t=textVersion(editor).trim();const words=t?(t.match(/\S+/gu)||[]).length:0;const badge=$('#composeWordCount',root);if(badge)badge.textContent=`${words} palavras · ${t.length} caracteres`;const mimeSize=new Blob([serializableHtml()]).size+attachments.reduce((total,a)=>total+Math.ceil(Number(a.size||0)*4/3)+1024,0)+4096;const sizeBadge=$('#composeMessageSize',root);if(sizeBadge)sizeBadge.textContent=`≈ ${(mimeSize/1024/1024).toFixed(2)} MiB`};
- editor.addEventListener('input',updateWordCount);updateWordCount();
+ const updateWordCount=()=>{scheduleWordCount?.cancel();const t=textVersion(editor).trim();const words=t?(t.match(/\S+/gu)||[]).length:0;const badge=$('#composeWordCount',root);if(badge)badge.textContent=`${words} palavras · ${t.length} caracteres`;const mimeSize=new Blob([serializableHtml()]).size+attachments.reduce((total,a)=>total+Math.ceil(Number(a.size||0)*4/3)+1024,0)+4096;const sizeBadge=$('#composeMessageSize',root);if(sizeBadge)sizeBadge.textContent=`≈ ${(mimeSize/1024/1024).toFixed(2)} MiB`};
+ scheduleWordCount=deferComposerEstimate(updateWordCount);editor.addEventListener('input',scheduleWordCount);updateWordCount();
  const findPanel=$('#composeFindPanel',root),findInput=$('#composeFindInput',root),replaceInput=$('#composeReplaceInput',root),findStatus=$('#composeFindStatus',root);
  const findPrevButton=$('#composeFindPrev',root),findReplaceControls=$('#composeReplaceControls',root);
  const highlightSupported=Boolean(globalThis.CSS?.highlights&&globalThis.Highlight);
@@ -341,7 +374,7 @@ export async function openComposer(ctx,seed={},options={}){
  window.addEventListener('resize',paintMatches);
  window.addEventListener('scroll',paintMatches,true);
  $('#composeExpandBtn',root).onclick=()=>{const on=root.classList.toggle('composeExpanded');const b=$('#composeExpandBtn',root);b.setAttribute('aria-pressed',String(on));b.textContent=on?'Recolher editor':'Expandir editor'};
- $('#composePreviewBtn',root).onclick=()=>{const safe=serializableHtml();const preview=modal('Pré-visualização antes de enviar',`<div class="composePreviewMessage"><div><strong>Assunto:</strong> ${esc($('#cSubject',root).value||'(sem assunto)')}</div><div><strong>Para:</strong> ${esc(recipientFields.to.commit())}</div><hr><div class="composePreviewBody"></div></div>`,{wide:true});const box=preview?.root?.querySelector?.('.composePreviewBody');if(box){const doc=new DOMParser().parseFromString(safe,'text/html');doc.querySelectorAll('script,iframe,object,embed,form,style,link,meta,svg').forEach(n=>n.remove());doc.querySelectorAll('*').forEach(n=>{for(const a of [...n.attributes]){if(/^on/i.test(a.name)||a.name==='srcdoc'||(/^(href|src)$/i.test(a.name)&&/^(javascript:|https?:|data:)/i.test(a.value)))n.removeAttribute(a.name)}});box.innerHTML=doc.body.innerHTML}};
+ $('#composePreviewBtn',root).onclick=()=>{const safe=sanitizeComposerHtml(serializableHtml());const preview=modal('Pré-visualização antes de enviar',`<div class="composePreviewMessage"><div><strong>Assunto:</strong> ${esc($('#cSubject',root).value||'(sem assunto)')}</div><div><strong>Para:</strong> ${esc(recipientFields.to.commit())}</div><hr><div class="composePreviewBody"></div></div>`,{wide:true});const box=preview?.root?.querySelector?.('.composePreviewBody');if(box)box.innerHTML=safe};
  $('#composeAiDataBtn',root).onclick=()=>{const text=textVersion(editor);modal('Dados disponíveis para assistência por IA',`<p>O conteúdo abaixo é uma prévia local do texto do compositor. O envio efetivo depende da operação de IA escolhida.</p><p><strong>Provedor e modelo:</strong> definidos nas configurações de IA.</p><textarea readonly class="composeAiDisclosure">${esc(text)}</textarea><p>Esta tela não substitui a confirmação de consentimento da ferramenta de IA.</p>`,{wide:true})};
  let saveChain=Promise.resolve(),changeSerial=0,terminalizing=false;
  let remoteChain=Promise.resolve();

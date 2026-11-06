@@ -1,0 +1,69 @@
+name: 0.8.3 - Chromium settings renderer (not native WebViews)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  renderer:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { label: linux-x64, os: ubuntu-24.04 }
+          - { label: windows-x64, os: windows-2022 }
+          - { label: macos-intel, os: macos-15-intel }
+          - { label: macos-arm64, os: macos-15 }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    env:
+      PYTHONUTF8: '1'
+      TCS_VISUAL_OUTPUT: ${{ github.workspace }}/.build-v083/visual
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Exact Playwright, no application dependencies changed
+        run: npm install --prefix .build-v083/playwright --no-save --package-lock=false --ignore-scripts playwright@1.58.2
+      - name: Chromium and Linux browser dependencies
+        if: runner.os == 'Linux'
+        run: node .build-v083/playwright/node_modules/playwright/cli.js install --with-deps chromium
+      - name: Chromium on Windows or macOS
+        if: runner.os != 'Linux'
+        run: node .build-v083/playwright/node_modules/playwright/cli.js install chromium
+      - name: Resolve the installed module without root npm dependencies
+        run: |
+          set -euo pipefail
+          python - <<'PYMODULE'
+          import os
+          from pathlib import Path
+          uri = Path('.build-v083/playwright/node_modules/playwright/index.mjs').resolve().as_uri()
+          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as stream:
+              stream.write('TCS_PLAYWRIGHT_MODULE=' + uri + '\n')
+          PYMODULE
+      - name: Encoding and synthetic settings renderer
+        run: |
+          set -euo pipefail
+          python scripts/quality/v083-utf8.py
+          node scripts/quality/rc8fix1-visual.mjs
+      - name: Keep renderer evidence, including failures
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: chromium-renderer-v083-${{ matrix.label }}-${{ github.run_number }}
+          path: .build-v083/visual/*
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 14

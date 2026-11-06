@@ -1,3 +1,5 @@
+mod account_integrity;
+mod text_encoding;
 mod window_key;
 
 // RC2 diagnostic journal: records only event classes and source locations, NEVER
@@ -526,8 +528,13 @@ fn data_dir() -> PathBuf {
 
 fn state_for(path: PathBuf) -> Result<AppState, String> {
     let store = CoreStore::open(path.join("mail.db"))?;
-    let ai = AiStore::open(path.join("ai.db"))?;
-    ai.ensure_default_provider()?;
+    let ai_path = path.join("ai.db");
+    let ai = AiStore::open(&ai_path)
+        .and_then(|ai| {
+            ai.ensure_default_provider()?;
+            Ok(ai)
+        })
+        .unwrap_or_else(|_| AiStore::unavailable(&ai_path));
     if let Ok(db) = store.legacy() {
         let keys = [
             "ai.enabled",
@@ -1041,17 +1048,57 @@ async fn bootstrap(state: State<'_, AppState>) -> Result<Bootstrap, String> {
 
 #[tauri::command]
 async fn list_system_fonts() -> Result<Vec<String>, String> {
-    tauri::async_runtime::spawn_blocking(move||{
-        let mut fonts:Vec<String>=Vec::new();
-        #[cfg(target_os="linux")]
-        { if let Ok(out)=std::process::Command::new("fc-list").args(["--format=%{family}\\n"]).output(){if out.status.success(){for line in String::from_utf8_lossy(&out.stdout).lines(){for family in line.split(','){let v=family.trim();if !v.is_empty(){fonts.push(v.to_string())}}}}} }
-        #[cfg(target_os="macos")]
-        { if let Ok(out)=std::process::Command::new("system_profiler").arg("SPFontsDataType").output(){if out.status.success(){for line in String::from_utf8_lossy(&out.stdout).lines(){let v=line.trim();if v.ends_with(':')&&!v.contains("Fonts:"){fonts.push(v.trim_end_matches(':').to_string())}}}} }
-        #[cfg(target_os="windows")]
+    static FONT_CACHE: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+    if let Some(fonts) = FONT_CACHE.get() {
+        return Ok(fonts.clone());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut fonts: Vec<String> = Vec::new();
+        #[cfg(target_os = "linux")]
+        {
+            if let Ok(out) = std::process::Command::new("fc-list")
+                .args(["--format=%{family}\\n"])
+                .output()
+            {
+                if out.status.success() {
+                    for line in text_encoding::decode_font_output(&out.stdout)
+                        .unwrap_or_default()
+                        .lines()
+                    {
+                        for family in line.split(',') {
+                            let v = family.trim();
+                            if !v.is_empty() {
+                                fonts.push(v.to_string())
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[cfg(target_os = "macos")]
+        {
+            if let Ok(out) = std::process::Command::new("system_profiler")
+                .arg("SPFontsDataType")
+                .output()
+            {
+                if out.status.success() {
+                    for line in text_encoding::decode_font_output(&out.stdout)
+                        .unwrap_or_default()
+                        .lines()
+                    {
+                        let v = line.trim();
+                        if v.ends_with(':') && !v.contains("Fonts:") {
+                            fonts.push(v.trim_end_matches(':').to_string())
+                        }
+                    }
+                }
+            }
+        }
+        #[cfg(target_os = "windows")]
         {
             use std::os::windows::process::CommandExt;
             const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-            let script = r#"(Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts').PSObject.Properties | Where-Object {$_.Name -notmatch '^PS'} | ForEach-Object {$_.Name -replace ' \(.+?\)$',''}"#;
+            let script = text_encoding::WINDOWS_FONT_SCRIPT;
             if let Ok(out) = std::process::Command::new("powershell.exe")
                 .args(["-NoProfile", "-NonInteractive", "-Command", script])
                 .creation_flags(CREATE_NO_WINDOW)
@@ -1059,7 +1106,8 @@ async fn list_system_fonts() -> Result<Vec<String>, String> {
             {
                 if out.status.success() {
                     fonts.extend(
-                        String::from_utf8_lossy(&out.stdout)
+                        text_encoding::decode_font_output(&out.stdout)
+                            .unwrap_or_default()
                             .lines()
                             .map(|v| v.trim().to_string())
                             .filter(|v| !v.is_empty()),
@@ -1067,9 +1115,32 @@ async fn list_system_fonts() -> Result<Vec<String>, String> {
                 }
             }
         }
-        if fonts.is_empty(){fonts=["Sans","Serif","Monospace","Arial","Helvetica","Verdana","Tahoma","Trebuchet MS","Georgia","Times New Roman","Courier New"].into_iter().map(str::to_string).collect();}
-        fonts.sort_by_key(|v|v.to_ascii_lowercase());fonts.dedup_by(|a,b|a.eq_ignore_ascii_case(b));fonts.truncate(300);Ok(fonts)
-    }).await.map_err(|e|e.to_string())?
+        if fonts.is_empty() {
+            fonts = [
+                "Sans",
+                "Serif",
+                "Monospace",
+                "Arial",
+                "Helvetica",
+                "Verdana",
+                "Tahoma",
+                "Trebuchet MS",
+                "Georgia",
+                "Times New Roman",
+                "Courier New",
+            ]
+            .into_iter()
+            .map(str::to_string)
+            .collect();
+        }
+        fonts.sort_by_key(|v| v.to_ascii_lowercase());
+        fonts.dedup_by(|a, b| a.eq_ignore_ascii_case(b));
+        fonts.truncate(300);
+        let _ = FONT_CACHE.set(fonts.clone());
+        Ok(fonts)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -2202,7 +2273,7 @@ async fn preview_received_attachment(
         if text_like {
             if size>1024*1024{return Err("O arquivo de texto é grande demais para pré-visualização interna. Use Abrir ou Salvar.".into())}
             let bytes=std::fs::read(path).map_err(|e|e.to_string())?;
-            let text=String::from_utf8_lossy(&bytes).into_owned();
+            let text=text_encoding::decode_preview_text(&bytes)?;
             return Ok(serde_json::json!({"kind":"text","filename":filename,"mime":mime,"text":text}));
         }
         Err("Pré-visualização interna disponível apenas para imagens e arquivos de texto seguros. Use Abrir ou Salvar para este formato.".into())
@@ -2270,16 +2341,21 @@ async fn list_accounts_full(state: State<'_, AppState>) -> Result<Vec<Account>, 
     .await
     .map_err(|e| e.to_string())?
 }
+static ACCOUNT_CHANGES: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 #[tauri::command]
 async fn save_account(req: AccountInput, state: State<'_, AppState>) -> Result<i64, String> {
+    let _guard = ACCOUNT_CHANGES.lock().await;
     let s = state.store.clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    let (account, previous, secret, authenticate) = tauri::async_runtime::spawn_blocking(move || -> Result<_, String> {
         let db = s.legacy()?;
         let previous = if req.id > 0 {
             db.get_account(req.id).map_err(|e| e.to_string())?
         } else {
             None
         };
+        if req.id > 0 && previous.is_none() { return Err("Conta não encontrada".into()); }
+        if db.list_accounts().map_err(|e| e.to_string())?.iter().any(|a| a.id != req.id && a.email.eq_ignore_ascii_case(req.email.trim())) { return Err("Este endereço já está cadastrado.".into()); }
         // Mailbox identity is locked for OAuth accounts: editing the local label
         // must never strand Google or Microsoft secrets under a different email.
         if previous.as_ref().is_some_and(|a| a.auth_method.eq_ignore_ascii_case("oauth2")
@@ -2329,48 +2405,62 @@ async fn save_account(req: AccountInput, state: State<'_, AppState>) -> Result<i
             default_signature_id: previous.as_ref().and_then(|a| a.default_signature_id),
             color: req.color,
         };
-        if let Some(old) = previous.as_ref() {
-            if !old.email.eq_ignore_ascii_case(&req.email)
-                && req.password.as_ref().map(|p| p.is_empty()).unwrap_or(true)
-            {
-                let _ = tcs_core::secrets::SecretStore::migrate_password(&old.email, &req.email);
-            }
-        }
-        let id = db.save_account(&a).map_err(|e| e.to_string())?;
-        if let Some(p) = req.password.filter(|p| !p.is_empty()) {
-            tcs_core::secrets::SecretStore::store_password(&req.email, &p)
-                .map_err(|e| e.to_string())?;
-        }
-        Ok(id)
-    })
-    .await
-    .map_err(|e| e.to_string())?
-}
-#[tauri::command]
-async fn delete_account(id: i64, state: State<'_, AppState>) -> Result<(), String> {
+
+        let changed_connection = previous.as_ref().is_none_or(|old| old.email != a.email
+            || old.imap_host != a.imap_host || old.imap_port != a.imap_port
+            || old.imap_security != a.imap_security || old.username != a.username);
+        let supplied = req.password.filter(|p| !p.is_empty());
+        let authenticate = !a.auth_method.eq_ignore_ascii_case("oauth2")
+            && (changed_connection || supplied.is_some());
+        let secret = if authenticate {
+            Some(match supplied {
+                Some(value) => value,
+                None => {
+                    let old = previous.as_ref().ok_or("Informe a senha ou senha de aplicativo para conectar a conta.")?;
+                    tcs_core::secrets::SecretStore::lookup_password(&old.email)
+                        .map_err(|_| "Desbloqueie o cofre do sistema ou informe novamente a credencial.".to_string())?
+                }
+            })
+        } else { None };
+        Ok((a, previous, secret, authenticate))
+    }).await.map_err(|e| e.to_string())??;
+    if authenticate {
+        let mut session = tokio::time::timeout(std::time::Duration::from_secs(45),
+            tcs_core::async_mail::login_secure(&account, secret.as_deref().unwrap_or_default()))
+            .await.map_err(|_| "A conexão IMAP excedeu o tempo limite. Verifique a rede e os servidores; a conta não foi alterada.".to_string())?
+            .map_err(|_| "Não foi possível autenticar a conta por IMAP seguro. Verifique servidor, usuário, senha de aplicativo ou política do provedor; a conta não foi alterada.".to_string())?;
+        let _ = tokio::time::timeout(std::time::Duration::from_secs(8), session.logout()).await;
+    }
     let s = state.store.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let db = s.legacy()?;
-        if let Some(a) = db.get_account(id).map_err(|e| e.to_string())? {
-            if a.auth_method.eq_ignore_ascii_case("oauth2")
-                && a.oauth_provider.eq_ignore_ascii_case("google")
-            {
-                let _ = tcs_core::oauth::revoke_google_tokens(&a.email);
-            } else if a.auth_method.eq_ignore_ascii_case("oauth2")
-                && a.oauth_provider.eq_ignore_ascii_case("microsoft")
-            {
-                let _ = tcs_core::oauth::clear_microsoft_tokens(&a.email);
-            } else {
-                let _ = tcs_core::secrets::SecretStore::clear_password(&a.email);
-            }
+        let id = account_integrity::save_with_secret(&account_integrity::OsVault, &account.email,
+            secret.as_deref(), || db.save_account(&account).map_err(|e| e.to_string()))?;
+        if let Some(old) = previous.filter(|old| old.email != account.email && !old.auth_method.eq_ignore_ascii_case("oauth2")) {
+            tcs_core::secrets::SecretStore::clear_password(&old.email).map_err(|_| "A conta foi salva. A credencial antiga não pôde ser removida do cofre; remova-a no gerenciador de credenciais do sistema.".to_string())?;
         }
-        s.conn()?
-            .execute("DELETE FROM accounts WHERE id=?1", rusqlite::params![id])
+        Ok(id)
+    }).await.map_err(|e| e.to_string())?
+}
+#[tauri::command]
+async fn delete_account(id: i64, state: State<'_, AppState>) -> Result<(), String> {
+    let _guard = ACCOUNT_CHANGES.lock().await;
+    let s = state.store.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let db = s.legacy()?;
+        let Some(a) = db.get_account(id).map_err(|e| e.to_string())? else { return Ok(()) };
+        // Never revoke/remove a usable credential before the database deletion commits.
+        s.conn()?.execute("DELETE FROM accounts WHERE id=?1", rusqlite::params![id])
             .map_err(|e| e.to_string())?;
-        Ok(())
-    })
-    .await
-    .map_err(|e| e.to_string())?
+        let cleanup = if a.auth_method.eq_ignore_ascii_case("oauth2") && a.oauth_provider.eq_ignore_ascii_case("google") {
+            tcs_core::oauth::revoke_google_tokens(&a.email)
+        } else if a.auth_method.eq_ignore_ascii_case("oauth2") && a.oauth_provider.eq_ignore_ascii_case("microsoft") {
+            tcs_core::oauth::clear_microsoft_tokens(&a.email)
+        } else {
+            tcs_core::secrets::SecretStore::clear_password(&a.email).map_err(|e| e.to_string())
+        };
+        cleanup.map_err(|_| "A conta foi removida do TCS Mail, mas o cofre não pôde ser limpo. Remova a credencial antiga no gerenciador do sistema e, para OAuth, revise a autorização no provedor.".into())
+    }).await.map_err(|e| e.to_string())?
 }
 #[tauri::command]
 async fn diagnose_account(
@@ -5019,22 +5109,7 @@ async fn sync_contact_source(id: i64, state: State<'_, AppState>) -> Result<usiz
 }
 
 fn split_mbox(raw: &[u8]) -> Vec<Vec<u8>> {
-    let text = String::from_utf8_lossy(raw);
-    let mut out = Vec::new();
-    let mut current = Vec::<u8>::new();
-    for (idx, line) in text.split_inclusive('\n').enumerate() {
-        if line.starts_with("From ") && (idx == 0 || !current.is_empty()) {
-            if !current.is_empty() {
-                out.push(std::mem::take(&mut current));
-            }
-            continue;
-        }
-        current.extend_from_slice(line.as_bytes());
-    }
-    if !current.is_empty() {
-        out.push(current);
-    }
-    out
+    text_encoding::split_mbox(raw)
 }
 
 #[tauri::command]
@@ -5876,7 +5951,6 @@ async fn ai_save_provider(
         if provider.id.trim().is_empty() {
             return Err("provider id obrigatório".into());
         }
-        ai.upsert_provider(&provider)?;
         if let Some(secret) = secret {
             let key = format!("ai-provider:{}", provider.id);
             if secret.trim().is_empty() {
@@ -5886,6 +5960,7 @@ async fn ai_save_provider(
                     .map_err(|e| e.to_string())?;
             }
         }
+        ai.upsert_provider(&provider)?;
         Ok(())
     })
     .await
@@ -5896,6 +5971,16 @@ async fn ai_save_provider(
 async fn ai_delete_provider(id: String, state: State<'_, AppState>) -> Result<(), String> {
     let ai = state.ai.clone();
     tauri::async_runtime::spawn_blocking(move || {
+        let cfg = ai.runtime_config()?;
+        if [&cfg.fast, &cfg.advanced, &cfg.embedding]
+            .iter()
+            .any(|binding| binding.provider_id == id && !binding.model.trim().is_empty())
+        {
+            return Err(
+                "A conexão está em uso. Escolha outra conexão para os modelos antes de removê-la."
+                    .into(),
+            );
+        }
         ai.delete_provider(&id)?;
         let _ = tcs_core::secrets::SecretStore::clear_password(&format!("ai-provider:{id}"));
         Ok(())
@@ -5922,6 +6007,44 @@ async fn ai_list_models(
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+/// An explicit, billable connection test using synthetic text only.
+/// Does not change activation, model bindings or mailbox authorization.
+#[tauri::command]
+async fn ai_test_provider(
+    provider_id: String,
+    model: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let ai = state.ai.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let router = ai_router(&ai)?;
+        let secret = ai_provider_secret(&provider_id);
+        let messages = [tcs_ai_core::provider::ChatMessage {
+            role: "user".into(),
+            content: "Reply with OK. This is a connection test, with no email data.".into(),
+        }];
+        let output = router
+            .chat(
+                &provider_id,
+                secret.as_deref(),
+                &model,
+                &messages,
+                0.0,
+                None,
+            )
+            .map_err(|_| {
+                "Não foi possível testar o modelo. Confira conexão, chave e acesso ao modelo."
+                    .to_string()
+            })?;
+        if output.trim().is_empty() {
+            return Err("O modelo respondeu sem texto. Escolha um modelo de conversa.".into());
+        }
+        Ok(())
+    })
+    .await
+    .map_err(|_| "Teste de IA interrompido.".to_string())?
 }
 
 #[tauri::command]
@@ -6377,18 +6500,18 @@ fn ai_analyze_message_sync(
     {
         return Err("Esta mensagem não contém assunto nem texto disponíveis para análise. Imagens não são enviadas ao modelo; verifique o conteúdo visual manualmente.".into());
     }
-    let key = if d.message_id.is_empty() {
-        String::new()
-    } else {
-        format!(
-            "{}::{}::clean{}::images{}",
-            d.message_id,
-            if english { "en-US" } else { "pt-BR" },
-            db.get_setting("ai.content.clean_noise").unwrap_or_default(),
-            db.get_setting("ai.content.ignore_images")
-                .unwrap_or_default()
-        )
-    };
+    let key = ai.analysis_cache_key(
+        d.account_id,
+        d.id,
+        &serde_json::json!({
+            "message_id":d.message_id, "folder":d.folder, "subject":d.subject,
+            "body":d.body_text, "from":d.from_email, "to":d.to_text,
+            "locale":if english { "en-US" } else { "pt-BR" },
+            "clean_noise":db.get_setting("ai.content.clean_noise"),
+            "ignore_images":db.get_setting("ai.content.ignore_images")
+        }),
+        &cfg,
+    )?;
     if !key.is_empty() {
         if let Some(mut cached) = ai.cached_analysis(&key)? {
             cached["cached"] = serde_json::json!(true);
@@ -6793,8 +6916,13 @@ pub fn background_idle() -> Result<(), String> {
 pub fn migrate_ai_only() -> Result<(), String> {
     let path = data_dir();
     let store = CoreStore::open(path.join("mail.db"))?;
-    let ai = AiStore::open(path.join("ai.db"))?;
-    ai.ensure_default_provider()?;
+    let ai_path = path.join("ai.db");
+    let ai = AiStore::open(&ai_path)
+        .and_then(|ai| {
+            ai.ensure_default_provider()?;
+            Ok(ai)
+        })
+        .unwrap_or_else(|_| AiStore::unavailable(&ai_path));
     let db = store.legacy()?;
     let keys = [
         "ai.enabled",
@@ -7055,6 +7183,7 @@ pub fn run() {
             ai_save_provider,
             ai_delete_provider,
             ai_list_models,
+            ai_test_provider,
             ai_rag_search,
             ai_rag_sources,
             ai_rag_status,

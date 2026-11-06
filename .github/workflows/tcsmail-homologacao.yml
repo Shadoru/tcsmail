@@ -1,190 +1,101 @@
-name: TCS Mail RC8 - Homologacao e instaladores
+name: TCS Mail 0.8.3 - native builds and installers
 
 on:
   workflow_dispatch:
-    inputs:
-      linux:
-        description: "Linux x64: DEB e RPM"
-        type: boolean
-        default: true
-      windows:
-        description: "Windows x64: EXE e MSI"
-        type: boolean
-        default: true
-      mac_intel:
-        description: "macOS Intel: APP e DMG"
-        type: boolean
-        default: true
-      mac_arm:
-        description: "macOS Apple Silicon: APP e DMG"
-        type: boolean
-        default: true
 
 permissions:
   contents: read
 
 concurrency:
-  group: tcsmail-rc8-${{ github.ref }}
+  group: tcsmail-v083-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  selecionar:
-    name: Selecionar sistemas
-    runs-on: ubuntu-24.04
-    outputs:
-      matrix: ${{ steps.matriz.outputs.matrix }}
-      count: ${{ steps.matriz.outputs.count }}
-    steps:
-      - name: Gerar matriz das caixas selecionadas
-        id: matriz
-        shell: bash
-        env:
-          OPT_LINUX: ${{ inputs.linux }}
-          OPT_WINDOWS: ${{ inputs.windows }}
-          OPT_MAC_INTEL: ${{ inputs.mac_intel }}
-          OPT_MAC_ARM: ${{ inputs.mac_arm }}
-        run: |
-          python3 - <<'PYMATRIX'
-          import json, os
-          opts = {'linux': os.environ['OPT_LINUX'],
-                  'windows': os.environ['OPT_WINDOWS'],
-                  'mac_intel': os.environ['OPT_MAC_INTEL'],
-                  'mac_arm': os.environ['OPT_MAC_ARM']}
-          systems = [
-            {'label':'linux-x64','os':'ubuntu-24.04','kind':'linux','rust_target':'x86_64-unknown-linux-gnu','bundles':'deb,rpm'},
-            {'label':'windows-x64','os':'windows-2022','kind':'windows','rust_target':'x86_64-pc-windows-msvc','bundles':'nsis,msi'},
-            {'label':'macos-intel','os':'macos-15-intel','kind':'mac_intel','rust_target':'x86_64-apple-darwin','bundles':'app,dmg'},
-            {'label':'macos-arm64','os':'macos-15','kind':'mac_arm','rust_target':'aarch64-apple-darwin','bundles':'app,dmg'}]
-          selected = [x for x in systems if opts[x['kind']].lower() == 'true']
-          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as f:
-              f.write('matrix='+json.dumps({'include': selected},separators=(',',':'))+'\n')
-              f.write('count='+str(len(selected))+'\n')
-          print('Selected:', [x['label'] for x in selected])
-          PYMATRIX
   build:
-    needs: selecionar
-    if: ${{ needs.selecionar.outputs.count != '0' }}
     name: ${{ matrix.label }}
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(needs.selecionar.outputs.matrix) }}
+      matrix:
+        include:
+          - { label: linux-x64, os: ubuntu-24.04, kind: linux, rust_target: x86_64-unknown-linux-gnu }
+          - { label: windows-x64, os: windows-2022, kind: windows, rust_target: x86_64-pc-windows-msvc }
+          - { label: macos-intel, os: macos-15-intel, kind: mac_intel, rust_target: x86_64-apple-darwin }
+          - { label: macos-arm64, os: macos-15, kind: mac_arm, rust_target: aarch64-apple-darwin }
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 120
+    timeout-minutes: 150
     env:
-      PYTHONUTF8: "1"
+      PYTHONUTF8: '1'
+      CARGO_HOME: ${{ github.workspace }}/.build-v083/cargo-home
+      RUSTUP_HOME: ${{ github.workspace }}/.build-v083/rustup-home
     steps:
-      - name: Checkout exato do commit
+      - name: Exact commit checkout without push credentials
         uses: actions/checkout@v5
         with:
           persist-credentials: false
-      - name: Dependencias Linux Tauri
-        if: matrix.kind == 'linux'
+      - name: Linux native prerequisites
+        if: runner.os == 'Linux'
         shell: bash
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf appstream rpm rpm2cpio cpio
-      - name: Python 3.12
-        uses: actions/setup-python@v7
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf appstream rpm rpm2cpio cpio libarchive-tools libsecret-tools
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
-      - name: Node 24
-        uses: actions/setup-node@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
           package-manager-cache: false
-      - name: Rust estável com Clippy e Rustfmt
+      - name: Pinned Rust with native target, Rustfmt and Clippy
         uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: 1.99.0
           components: clippy, rustfmt
           targets: ${{ matrix.rust_target }}
-      - name: Cache Rust
-        uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: tcsmail-${{ matrix.rust_target }}
-      - name: Contrato RC7 e sintaxe dos scripts
-        shell: bash
-        run: |
-          set -euo pipefail
-          python scripts/quality/rc7-branding-gate.py
-          python scripts/quality/rc8-linux-rpm-regression.py
-          python scripts/quality/test_rc7_microsoft_connect_and_branding.py
-          python scripts/quality/tcsmail-package-guard.py --source
-          python scripts/quality/test_utf8_ci_sources.py
-          python scripts/quality/rc7-ui-and-packager.py
-          python scripts/quality/rc7-clean-release-contract.py
-          python scripts/quality/test_frontend_module_syntax.py
-          node scripts/quality/rc7-folder-move.test.mjs
-          node scripts/quality/rc7-first-run-regression.mjs
-          python scripts/quality/rc7-providers-and-release.py
-          python scripts/quality/test_tcsmail_package_guard.py
-          node scripts/verify-ms-oauth.mjs
-          node scripts/quality/rc2-release-contract.mjs
-          node scripts/quality/rc2-interface-regression.mjs
-          node scripts/quality/rc2-native-composer-behavior.mjs
-          node scripts/quality/rc7-composer-routing.mjs
-          node scripts/quality/rc7-provider-sync-contract.mjs
-          python scripts/quality/rc7_crossplatform_regression.py
-          python scripts/quality/rc2-presentation-verify.py --source
-          python - <<'PY'
-          import pathlib, subprocess
-          for p in sorted(pathlib.Path('frontend').rglob('*.js')):
-              subprocess.run(['node', '--check', str(p)], check=True)
-          print('JS syntax: OK')
-          PY
-      - name: Rust fmt, check, test e Clippy
-        shell: bash
-        run: |
-          set -euo pipefail
-          cargo fmt --all -- --check
-          cargo check --locked --workspace --all-targets --target '${{ matrix.rust_target }}'
-          cargo test --locked --workspace --target '${{ matrix.rust_target }}'
-          cargo clippy --locked --workspace --all-targets --target '${{ matrix.rust_target }}' -- -D warnings
-      - name: Preparar Tauri CLI
-        shell: bash
-        run: cargo install tauri-cli --version '^2' --locked
-      - name: Compilar instaladores
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ '${{ matrix.kind }}' == 'linux' ]]; then
-            # DEB mantém a versão SemVer original da RC7.
-            cargo tauri build --target '${{ matrix.rust_target }}' --bundles deb
-            # RPM exige Version sem hífen. Release pré-estável ordena antes de 0.8.2-1.
-            # JSON Merge Patch é aplicado somente a esta invocação Tauri.
-            cargo tauri build --target '${{ matrix.rust_target }}' --bundles rpm \
-              --config '{"version":"0.8.2","bundle":{"linux":{"rpm":{"release":"0.rc8.1"}}}}'
-          else
-            cargo tauri build --target '${{ matrix.rust_target }}' --bundles '${{ matrix.bundles }}'
-          fi
-      - name: Inspecionar e preparar artefatos / SHA-256
-        shell: bash
-        run: |
-          set -euo pipefail
-          python scripts/quality/tcsmail-package-guard.py --bundles target/${{ matrix.rust_target }}/release/bundle --kind '${{ matrix.kind }}' --label '${{ matrix.label }}' --sha '${{ github.sha }}'
-      - name: Enviar artefatos privados (sem Release)
+          shared-key: tcsmail-v083-${{ matrix.rust_target }}
+      - name: Install exact Tauri CLI
+        run: cargo install tauri-cli --version '=2.12.4' --locked
+      - name: Required source regressions, Rust gates, native packages and payload guard
+        # The orchestrator runs rc8-bulk-delete-regression.mjs and behavioral
+        # rc8fix1-bulk-behavior.mjs, test_utf8_ci_sources.py, v083-utf8.py,
+        # all existing active RC7/RC2 gates, cargo fmt/check/test/Clippy --locked,
+        # native DEB+RPM (Version 0.8.3, Release 1), EXE+MSI or APP+DMG, then package inspection.
+        run: python scripts/build-0.8.3.py --target ${{ matrix.rust_target }}
+      - name: Retain diagnostic evidence even on failure
+        if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: tcsmail-0.8.2-rc8-${{ matrix.label }}-${{ github.run_number }}
+          name: evidence-0.8.3-${{ matrix.label }}-${{ github.run_number }}
+          path: |
+            .build-v083/**/result.json
+            .build-v083/**/*.log
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Upload inspected installers, no Release publication
+        uses: actions/upload-artifact@v7
+        with:
+          name: tcsmail-0.8.3-${{ matrix.label }}-${{ github.run_number }}
           path: delivery/${{ matrix.label }}/*
           if-no-files-found: error
           retention-days: 14
-  resumo:
-    name: Relatorio de homologacao
+  summary:
+    name: Four-target build result
     if: always()
-    needs: [selecionar, build]
+    needs: build
     runs-on: ubuntu-24.04
     steps:
-      - name: Resumo do commit e resultado
+      - name: Record limits and require all four native jobs
         shell: bash
+        env:
+          BUILD_RESULT: ${{ needs.build.result }}
         run: |
           {
-            echo '## TCS Mail 0.8.2-rc8 — Resultado'
-            echo ''
-            echo "- Commit: \`${GITHUB_SHA}\`"
-            echo "- Execução: \`${GITHUB_RUN_ID}\`"
-            echo "- Matriz de compilação: **${{ needs.build.result }}**"
-            echo '- Artefatos: seção **Artifacts** desta execução (somente se aprovados).'
-            echo '- Não foi criada Release nem houve publicação automática.'
-            echo '- Build verde não substitui instalação e testes funcionais em cada sistema.'
+            echo '## TCS Mail 0.8.3'
+            echo "Commit: ${GITHUB_SHA}"
+            echo "Four native build jobs: ${BUILD_RESULT}"
+            echo 'Installer checks do not replace native GUI/provider tests.'
+            echo 'No release was published and no commit was pushed.'
           } >> "$GITHUB_STEP_SUMMARY"
-          if [[ '${{ needs.build.result }}' != 'success' || '${{ needs.selecionar.outputs.count }}' == '0' ]]; then exit 1; fi
+          test "$BUILD_RESULT" = success

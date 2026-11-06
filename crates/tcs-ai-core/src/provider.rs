@@ -52,7 +52,7 @@ impl ProviderRouter {
             .connect_timeout(Duration::from_secs(10))
             .timeout(Duration::from_secs(600))
             .build()
-            .map_err(|e| ProviderError::Http(e.to_string()))?;
+            .map_err(|e| ProviderError::Http(e.without_url().to_string()))?;
         Ok(Self {
             client,
             providers: providers.into_iter().map(|p| (p.id.clone(), p)).collect(),
@@ -65,7 +65,7 @@ impl ProviderRouter {
             ProviderKind::Anthropic => ProviderCapabilities {
                 chat: true,
                 embeddings: false,
-                list_models: false,
+                list_models: true,
                 structured_outputs: false,
             },
             ProviderKind::Gemini => ProviderCapabilities {
@@ -131,8 +131,29 @@ impl ProviderRouter {
     ) -> Result<Vec<String>, ProviderError> {
         let p = self.provider(id)?;
         match p.kind {
-            ProviderKind::Anthropic | ProviderKind::AwsBedrock | ProviderKind::VertexAi => {
-                Ok(Vec::new())
+            ProviderKind::AwsBedrock | ProviderKind::VertexAi => Ok(Vec::new()),
+            ProviderKind::Anthropic => {
+                let key = secret
+                    .filter(|s| !s.trim().is_empty())
+                    .ok_or_else(|| ProviderError::CredentialMissing(p.id.clone()))?;
+                let base = Self::endpoint(p, "https://api.anthropic.com");
+                let v: Value = self
+                    .client
+                    .get(format!("{base}/v1/models"))
+                    .header("x-api-key", key)
+                    .header("anthropic-version", "2023-06-01")
+                    .send()
+                    .and_then(|r| r.error_for_status())
+                    .map_err(|e| ProviderError::Http(e.without_url().to_string()))?
+                    .json()
+                    .map_err(|e| ProviderError::Invalid(e.without_url().to_string()))?;
+                Ok(v.get("data")
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|m| m.get("id").and_then(Value::as_str))
+                    .map(str::to_string)
+                    .collect())
             }
             ProviderKind::Gemini => {
                 let key = secret.unwrap_or("");
@@ -142,14 +163,12 @@ impl ProviderRouter {
                 let base = Self::endpoint(p, "https://generativelanguage.googleapis.com");
                 let v: Value = self
                     .client
-                    .get(format!(
-                        "{base}/v1beta/models?key={}",
-                        urlencoding::encode(key)
-                    ))
+                    .get(format!("{base}/v1beta/models?pageSize=1000"))
+                    .header("x-goog-api-key", key)
                     .send()
-                    .map_err(|e| ProviderError::Http(e.to_string()))?
+                    .map_err(|e| ProviderError::Http(e.without_url().to_string()))?
                     .error_for_status()
-                    .map_err(|e| ProviderError::Http(e.to_string()))?
+                    .map_err(|e| ProviderError::Http(e.without_url().to_string()))?
                     .json()
                     .map_err(|e| ProviderError::Invalid(e.to_string()))?;
                 Ok(v.get("models")
@@ -185,9 +204,9 @@ impl ProviderRouter {
                     .get(format!("{base}/v1/models"))
                     .headers(h)
                     .send()
-                    .map_err(|e| ProviderError::Http(e.to_string()))?
+                    .map_err(|e| ProviderError::Http(e.without_url().to_string()))?
                     .error_for_status()
-                    .map_err(|e| ProviderError::Http(e.to_string()))?
+                    .map_err(|e| ProviderError::Http(e.without_url().to_string()))?
                     .json()
                     .map_err(|e| ProviderError::Invalid(e.to_string()))?;
                 Ok(v.get("data")
@@ -277,7 +296,7 @@ impl ProviderRouter {
                     .filter(|m| m.role != "system")
                     .map(|m| json!({"role":m.role,"content":m.content}))
                     .collect::<Vec<_>>();
-                let v:Value=self.client.post(format!("{base}/v1/messages")).timeout(timeout).headers(h).json(&json!({"model":model,"max_tokens":4096,"temperature":temperature,"system":system,"messages":msgs})).send().map_err(|e|ProviderError::Http(e.to_string()))?.error_for_status().map_err(|e|ProviderError::Http(e.to_string()))?.json().map_err(|e|ProviderError::Invalid(e.to_string()))?;
+                let v:Value=self.client.post(format!("{base}/v1/messages")).timeout(timeout).headers(h).json(&json!({"model":model,"max_tokens":4096,"temperature":temperature,"system":system,"messages":msgs})).send().map_err(|e|ProviderError::Http(e.without_url().to_string()))?.error_for_status().map_err(|e|ProviderError::Http(e.without_url().to_string()))?.json().map_err(|e|ProviderError::Invalid(e.to_string()))?;
                 v.get("content")
                     .and_then(Value::as_array)
                     .into_iter()
@@ -297,7 +316,7 @@ impl ProviderRouter {
                     .map(|m| format!("{}: {}", m.role, m.content))
                     .collect::<Vec<_>>()
                     .join("\n\n");
-                let v:Value=self.client.post(format!("{base}/v1beta/models/{}:generateContent?key={}",urlencoding::encode(model),urlencoding::encode(key))).timeout(timeout).json(&json!({"contents":[{"parts":[{"text":text}]}],"generationConfig":{"temperature":temperature}})).send().map_err(|e|ProviderError::Http(e.to_string()))?.error_for_status().map_err(|e|ProviderError::Http(e.to_string()))?.json().map_err(|e|ProviderError::Invalid(e.to_string()))?;
+                let v:Value=self.client.post(format!("{base}/v1beta/models/{}:generateContent",urlencoding::encode(model))).header("x-goog-api-key", key).timeout(timeout).json(&json!({"contents":[{"parts":[{"text":text}]}],"generationConfig":{"temperature":temperature}})).send().map_err(|e|ProviderError::Http(e.without_url().to_string()))?.error_for_status().map_err(|e|ProviderError::Http(e.without_url().to_string()))?.json().map_err(|e|ProviderError::Invalid(e.to_string()))?;
                 v.pointer("/candidates/0/content/parts/0/text")
                     .and_then(Value::as_str)
                     .map(str::to_string)
@@ -338,9 +357,9 @@ impl ProviderRouter {
                     .headers(h)
                     .json(&payload)
                     .send()
-                    .map_err(|e| ProviderError::Http(e.to_string()))?
+                    .map_err(|e| ProviderError::Http(e.without_url().to_string()))?
                     .error_for_status()
-                    .map_err(|e| ProviderError::Http(e.to_string()))?
+                    .map_err(|e| ProviderError::Http(e.without_url().to_string()))?
                     .json()
                     .map_err(|e| ProviderError::Invalid(e.to_string()))?;
                 v.pointer("/choices/0/message/content")
@@ -373,9 +392,9 @@ impl ProviderRouter {
                     .headers(h)
                     .json(&payload)
                     .send()
-                    .map_err(|e| ProviderError::Http(e.to_string()))?
+                    .map_err(|e| ProviderError::Http(e.without_url().to_string()))?
                     .error_for_status()
-                    .map_err(|e| ProviderError::Http(e.to_string()))?
+                    .map_err(|e| ProviderError::Http(e.without_url().to_string()))?
                     .json()
                     .map_err(|e| ProviderError::Invalid(e.to_string()))?;
                 v.pointer("/choices/0/message/content")
@@ -415,9 +434,9 @@ impl ProviderRouter {
                     .headers(h)
                     .json(&payload)
                     .send()
-                    .map_err(|e| ProviderError::Http(e.to_string()))?
+                    .map_err(|e| ProviderError::Http(e.without_url().to_string()))?
                     .error_for_status()
-                    .map_err(|e| ProviderError::Http(e.to_string()))?
+                    .map_err(|e| ProviderError::Http(e.without_url().to_string()))?
                     .json()
                     .map_err(|e| ProviderError::Invalid(e.to_string()))?;
                 parse_chat_content(&v)
@@ -446,7 +465,7 @@ impl ProviderRouter {
             .connect_timeout(Duration::from_secs(10))
             .timeout(timeout)
             .build()
-            .map_err(|e| ProviderError::Http(e.to_string()))?;
+            .map_err(|e| ProviderError::Http(e.without_url().to_string()))?;
         let mut headers = Self::json_headers();
         let (url, payload) = match p.kind {
             ProviderKind::Anthropic => {
@@ -490,12 +509,16 @@ impl ProviderRouter {
                     .map(|m| format!("{}: {}", m.role, m.content))
                     .collect::<Vec<_>>()
                     .join("\n\n");
+                headers.insert(
+                    HeaderName::from_static("x-goog-api-key"),
+                    HeaderValue::from_str(key)
+                        .map_err(|e| ProviderError::Invalid(e.to_string()))?,
+                );
                 (
                     format!(
-                        "{}/v1beta/models/{}:generateContent?key={}",
+                        "{}/v1beta/models/{}:generateContent",
                         Self::endpoint(p, "https://generativelanguage.googleapis.com"),
-                        urlencoding::encode(model),
-                        urlencoding::encode(key)
+                        urlencoding::encode(model)
                     ),
                     json!({"contents":[{"parts":[{"text":text}]}],"generationConfig":{"temperature":temperature}}),
                 )
@@ -578,9 +601,9 @@ impl ProviderRouter {
             .json(&payload)
             .send()
             .await
-            .map_err(|e| ProviderError::Http(e.to_string()))?
+            .map_err(|e| ProviderError::Http(e.without_url().to_string()))?
             .error_for_status()
-            .map_err(|e| ProviderError::Http(e.to_string()))?;
+            .map_err(|e| ProviderError::Http(e.without_url().to_string()))?;
         let result: Value = response
             .json()
             .await
@@ -629,15 +652,15 @@ impl ProviderRouter {
                     let v: Value = self
                         .client
                         .post(format!(
-                            "{base}/v1beta/models/{}:embedContent?key={}",
-                            urlencoding::encode(model),
-                            urlencoding::encode(key)
+                            "{base}/v1beta/models/{}:embedContent",
+                            urlencoding::encode(model)
                         ))
+                        .header("x-goog-api-key", key)
                         .json(&json!({"content":{"parts":[{"text":text}]}}))
                         .send()
-                        .map_err(|e| ProviderError::Http(e.to_string()))?
+                        .map_err(|e| ProviderError::Http(e.without_url().to_string()))?
                         .error_for_status()
-                        .map_err(|e| ProviderError::Http(e.to_string()))?
+                        .map_err(|e| ProviderError::Http(e.without_url().to_string()))?
                         .json()
                         .map_err(|e| ProviderError::Invalid(e.to_string()))?;
                     let vec = v
@@ -686,9 +709,9 @@ impl ProviderRouter {
                     .headers(h)
                     .json(&json!({"input":input}))
                     .send()
-                    .map_err(|e| ProviderError::Http(e.to_string()))?
+                    .map_err(|e| ProviderError::Http(e.without_url().to_string()))?
                     .error_for_status()
-                    .map_err(|e| ProviderError::Http(e.to_string()))?
+                    .map_err(|e| ProviderError::Http(e.without_url().to_string()))?
                     .json()
                     .map_err(|e| ProviderError::Invalid(e.to_string()))?;
                 parse_embeddings(&v)
@@ -724,9 +747,9 @@ impl ProviderRouter {
                     .headers(h)
                     .json(&json!({"model":model,"input":input}))
                     .send()
-                    .map_err(|e| ProviderError::Http(e.to_string()))?
+                    .map_err(|e| ProviderError::Http(e.without_url().to_string()))?
                     .error_for_status()
-                    .map_err(|e| ProviderError::Http(e.to_string()))?
+                    .map_err(|e| ProviderError::Http(e.without_url().to_string()))?
                     .json()
                     .map_err(|e| ProviderError::Invalid(e.to_string()))?;
                 parse_embeddings(&v)
@@ -819,6 +842,108 @@ fn parse_chat_content(v: &Value) -> Result<String, ProviderError> {
 #[cfg(test)]
 mod ai_transport_regression_tests {
     use super::*;
+    use std::io::{Read, Write};
+    fn fixture(
+        kind: ProviderKind,
+        body: &'static str,
+    ) -> (ProviderRouter, std::thread::JoinHandle<String>) {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let endpoint = format!("http://{}", listener.local_addr().unwrap());
+        let worker = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .unwrap();
+            let mut request = Vec::new();
+            let mut chunk = [0; 4096];
+            loop {
+                let n = stream.read(&mut chunk).unwrap();
+                if n == 0 {
+                    break;
+                }
+                request.extend_from_slice(&chunk[..n]);
+                if let Some(end) = request.windows(4).position(|x| x == b"\r\n\r\n") {
+                    let headers = String::from_utf8_lossy(&request[..end]).to_ascii_lowercase();
+                    let length = headers
+                        .lines()
+                        .find_map(|s| {
+                            s.strip_prefix("content-length:")
+                                .and_then(|v| v.trim().parse::<usize>().ok())
+                        })
+                        .unwrap_or(0);
+                    if request.len() >= end + 4 + length {
+                        break;
+                    }
+                }
+            }
+            write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",body.len(),body).unwrap();
+            String::from_utf8(request).unwrap()
+        });
+        let p = ProviderConfig {
+            id: "fixture".into(),
+            kind,
+            endpoint,
+            ..ProviderConfig::default()
+        };
+        (ProviderRouter::new(vec![p]).unwrap(), worker)
+    }
+    #[test]
+    fn anthropic_lists_models_with_header_credentials() {
+        let (router, worker) = fixture(
+            ProviderKind::Anthropic,
+            r#"{"data":[{"id":"claude-fixture"}]}"#,
+        );
+        assert_eq!(
+            router
+                .list_models("fixture", Some("synthetic-key"))
+                .unwrap(),
+            vec!["claude-fixture"]
+        );
+        let request = worker.join().unwrap().to_ascii_lowercase();
+        assert!(request.starts_with("get /v1/models "));
+        assert!(request.contains("x-api-key: synthetic-key"));
+        assert!(!request.lines().next().unwrap().contains("synthetic-key"));
+    }
+    #[test]
+    fn gemini_uses_header_not_url_for_key() {
+        let (router, worker) = fixture(
+            ProviderKind::Gemini,
+            r#"{"models":[{"name":"models/gemini-fixture"}]}"#,
+        );
+        assert_eq!(
+            router
+                .list_models("fixture", Some("synthetic-key"))
+                .unwrap(),
+            vec!["gemini-fixture"]
+        );
+        let request = worker.join().unwrap().to_ascii_lowercase();
+        assert!(request.contains("x-goog-api-key: synthetic-key"));
+        assert!(!request.lines().next().unwrap().contains("synthetic-key"));
+    }
+    #[test]
+    fn connection_chat_round_trips_unicode_without_mail_data() {
+        let (router, worker) = fixture(
+            ProviderKind::Gemini,
+            r#"{"candidates":[{"content":{"parts":[{"text":"Conexão OK — Segurança"}]}}]}"#,
+        );
+        let result = router
+            .chat(
+                "fixture",
+                Some("synthetic-key"),
+                "gemini-fixture",
+                &[ChatMessage {
+                    role: "user".into(),
+                    content: "Synthetic connection test".into(),
+                }],
+                0.0,
+                None,
+            )
+            .unwrap();
+        assert_eq!(result, "Conexão OK — Segurança");
+        let request = worker.join().unwrap();
+        assert!(request.contains("Synthetic connection test"));
+        assert!(!request.lines().next().unwrap().contains("synthetic-key"));
+    }
     #[test]
     fn no_reasoning_leak() {
         let v = json!({"choices":[{"finish_reason":"length","message":{"content":"","reasoning_content":"segredo"}}]});
