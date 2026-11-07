@@ -5,22 +5,18 @@ on:
     inputs:
       linux:
         description: "Linux x64 - DEB e RPM"
-        required: true
         type: boolean
         default: true
       windows:
         description: "Windows x64 - EXE e MSI"
-        required: true
         type: boolean
         default: true
       mac_intel:
         description: "macOS Intel - APP e DMG"
-        required: true
         type: boolean
         default: true
       mac_arm:
         description: "macOS Apple Silicon - APP e DMG"
-        required: true
         type: boolean
         default: true
 
@@ -32,16 +28,74 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  select:
+    name: Select requested platforms
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.selection.outputs.matrix }}
+      count: ${{ steps.selection.outputs.count }}
+    steps:
+      - name: Build selected platform matrix
+        id: selection
+        shell: bash
+        env:
+          SELECT_LINUX: ${{ inputs.linux }}
+          SELECT_WINDOWS: ${{ inputs.windows }}
+          SELECT_MAC_INTEL: ${{ inputs.mac_intel }}
+          SELECT_MAC_ARM: ${{ inputs.mac_arm }}
+        run: |
+          python3 - <<'PYMATRIX'
+          import json
+          import os
+
+          systems = [
+              ("linux", "linux-x64", "ubuntu-24.04",
+               "x86_64-unknown-linux-gnu"),
+              ("windows", "windows-x64", "windows-2022",
+               "x86_64-pc-windows-msvc"),
+              ("mac_intel", "macos-intel", "macos-15-intel",
+               "x86_64-apple-darwin"),
+              ("mac_arm", "macos-arm64", "macos-15",
+               "aarch64-apple-darwin"),
+          ]
+
+          selected = []
+
+          for key, label, runner, target in systems:
+              env_name = "SELECT_" + key.upper()
+
+              if os.environ.get(env_name, "").lower() == "true":
+                  selected.append({
+                      "label": label,
+                      "os": runner,
+                      "kind": key,
+                      "rust_target": target,
+                  })
+
+          matrix = json.dumps(
+              {"include": selected},
+              separators=(",", ":")
+          )
+
+          with open(
+              os.environ["GITHUB_OUTPUT"],
+              "a",
+              encoding="utf-8"
+          ) as output:
+              output.write("matrix=" + matrix + "\n")
+              output.write("count=" + str(len(selected)) + "\n")
+
+          print("Selected platforms:",
+                [x["label"] for x in selected])
+          PYMATRIX
+
   build:
+    needs: select
+    if: ${{ needs.select.outputs.count != '0' }}
     name: ${{ matrix.label }}
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - { label: linux-x64, os: ubuntu-24.04, kind: linux, rust_target: x86_64-unknown-linux-gnu }
-          - { label: windows-x64, os: windows-2022, kind: windows, rust_target: x86_64-pc-windows-msvc }
-          - { label: macos-intel, os: macos-15-intel, kind: mac_intel, rust_target: x86_64-apple-darwin }
-          - { label: macos-arm64, os: macos-15, kind: mac_arm, rust_target: aarch64-apple-darwin }
+      matrix: ${{ fromJSON(needs.select.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 150
     env:
@@ -102,9 +156,9 @@ jobs:
           if-no-files-found: error
           retention-days: 14
   summary:
-    name: Four-target build result
+    name: Selected-platform build result
     if: always()
-    needs: build
+    needs: [select, build]
     runs-on: ubuntu-24.04
     steps:
       - name: Record limits and require all four native jobs
@@ -115,7 +169,7 @@ jobs:
           {
             echo '## TCS Mail 0.8.3'
             echo "Commit: ${GITHUB_SHA}"
-            echo "Four native build jobs: ${BUILD_RESULT}"
+            echo "Selected native build jobs: ${BUILD_RESULT}"
             echo 'Installer checks do not replace native GUI/provider tests.'
             echo 'No release was published and no commit was pushed.'
           } >> "$GITHUB_STEP_SUMMARY"
