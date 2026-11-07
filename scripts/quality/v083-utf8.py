@@ -48,8 +48,9 @@ def inspect(root, counts=None):
         counts.update(first_party=0, third_party=0)
     for path in source_paths(root):
         relative = path.relative_to(root)
+        relative_text = relative.as_posix()
         if path.is_symlink():
-            errors.append(f"{relative}: source symlink requires explicit review")
+            errors.append(f"{relative_text}: source symlink requires explicit review")
             continue
         count += 1
         if counts is not None:
@@ -57,13 +58,13 @@ def inspect(root, counts=None):
         try:
             code = path.read_text(encoding="utf-8", errors="strict")
         except (UnicodeError, OSError) as exc:
-            errors.append(f"{relative}: unreadable UTF-8 ({type(exc).__name__})")
+            errors.append(f"{relative_text}: unreadable UTF-8 ({type(exc).__name__})")
             continue
         if "\x00" in code or code.startswith("\ufeff"):
-            errors.append(f"{relative}: NUL or UTF-8 BOM in text source")
+            errors.append(f"{relative_text}: NUL or UTF-8 BOM in text source")
         for line, text in enumerate(code.splitlines(), 1):
             if MOJIBAKE.search(text):
-                errors.append(f"{relative}:{line}: probable mojibake or replacement character")
+                errors.append(f"{relative_text}:{line}: probable mojibake or replacement character")
     if not count:
         errors.append("No text sources inspected")
     return count, errors

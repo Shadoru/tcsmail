@@ -51,7 +51,7 @@ class MacBundlePreparationTests(unittest.TestCase):
                 def fake_ditto(cmd, check):
                     self.assertTrue(check)
                     self.assertEqual(cmd[:5], ['ditto', '-c', '-k', '--sequesterRsrc', '--keepParent'])
-                    self.assertEqual(Path(cmd[5]), app)
+                    self.assertEqual(Path(cmd[5]).resolve(), app.resolve())
                     appzip = Path(cmd[6])
                     with zipfile.ZipFile(appzip, 'w') as z:
                         z.write(app / 'Contents' / 'MacOS' / 'tcs-mail',
