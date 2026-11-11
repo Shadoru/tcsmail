@@ -62,7 +62,8 @@ def main():
         lines.append(f'{digest}  {file.name}')
     (OUT/'SHA256SUMS').write_text('\n'.join(lines)+'\n',encoding='utf-8')
     (OUT/'LEIA_ANTES.txt').write_text(
-        'Build PARCIAL: assinaturas GPG destacadas verificáveis; NÃO é release completa.\n'
+        'TCS Mail 0.8.3 | compilação parcial de INSTALADORES. Aplicativo não alterado.\n'
+        'Assinaturas GPG destacadas verificáveis; NÃO é release completa.\n'
         'Consulte os respectivos jobs para verificar assinatura nativa, IMAP e OAuth.\n',encoding='utf-8')
     print(f'Aprovado: {len(collected)} instaladores selecionados para assinatura GPG.')
 

@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Describe genuine, verified native signing status without marketing ambiguity."""
 import json
+import os
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -12,6 +14,9 @@ labels = {
     "mac-intel": "macOS Intel APP.zip/DMG (Developer ID + notarização)",
     "mac-arm": "macOS Apple Silicon APP.zip/DMG (Developer ID + notarização)",
 }
+tag = os.environ.get('RELEASE_TAG','')
+if not re.fullmatch(r'installers-0\.8\.3-r[1-9][0-9]*', tag):
+    raise SystemExit('FALHA: tag inválida para notas da revisão dos instaladores')
 rows = []
 for item in status:
     platform = item["platform"]
@@ -25,7 +30,9 @@ for item in status:
     rows.append(f"- {labels[platform]}: {text}.")
 
 notes = "\n".join([
-    "TCS Mail — release em rascunho para homologação",
+    "TCS Mail 0.8.3 — instaladores (rascunho para homologação)",
+    "Versão do aplicativo: 0.8.3 (sem rc e sem alteração).",
+    "Revisão dos instaladores: " + tag + ".",
     "",
     "Foram geradas 9 distribuições para 4 alvos de build (incluindo APP.zip macOS).",
     "Estado REAL das assinaturas:",

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Only accept TCS Mail 0.8.3-based, signed existing release tag from main history."""
+"""Accept signed INSTALLER revision tags; application version MUST remain exactly 0.8.3."""
 import json
 import hashlib
 import os
@@ -9,15 +9,15 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 TAG = os.getenv('RELEASE_TAG', '')
-if not re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z][0-9A-Za-z.-]*)?', TAG):
+if not re.fullmatch(r'installers-0\.8\.3-r[1-9][0-9]*', TAG):
     raise SystemExit(f'FALHA: tag inválida: {TAG!r}')
-base = TAG[1:].split('-')[0]
+base = '0.8.3'  # fixed application version; installer revision is separate
 conf = ROOT / 'src-tauri' / 'tauri.conf.json'
 if not conf.is_file():
     raise SystemExit('FALHA: tauri.conf.json ausente')
 version = str(json.loads(conf.read_text('utf-8')).get('version',''))
 if version != base:
-    raise SystemExit(f'FALHA: versão fonte {version} diferente da tag {TAG}')
+    raise SystemExit(f'FALHA: aplicativo deve ser 0.8.3, mas tauri.conf.json informa {version!r}; tag {TAG} é somente dos instaladores')
 for f in ('src-tauri/Cargo.toml', 'src-tauri/icons/icon.png',
           'scripts/build-0.8.3.py', 'scripts/release/prepare_branding.py'):
     if not (ROOT/f).is_file():
@@ -53,9 +53,9 @@ signatures = []
 for line in (verified.stdout+'\n'+verified.stderr).splitlines():
     if '[GNUPG:] VALIDSIG ' in line:
         fields=line.split('[GNUPG:] VALIDSIG ',1)[1].split()
-        signatures.append(fields[-1] if len(fields)>=10 else fields[0])
-if len(signatures)!=1 or signatures[0].upper()!=allowed_primary_fpr:
-    raise SystemExit('FALHA: tag não foi assinada pela chave primária/subchave autorizada.')
+        signatures.append((fields[0].upper(),fields[9].upper() if len(fields)>=10 else ''))
+if signatures != [('EB55887A1A9923E4D2FE4803B03A894B9F604781',allowed_primary_fpr)]:
+    raise SystemExit('FALHA: tag não foi assinada EXCLUSIVAMENTE pela subchave GPG autorizada.')
 trusted_sha=os.getenv('TCS_TRUSTED_SOURCE_SHA','').strip()
 if trusted_sha:
     actual=subprocess.run(['git','rev-parse','HEAD'],cwd=ROOT,check=True,capture_output=True,text=True).stdout.strip()

@@ -22,6 +22,21 @@ LOCKS = {
 }
 
 
+def executable_for_subprocess(name, *, windows=None):
+    """Return an executable path; Windows Node commands are .cmd shims.
+
+    shutil.which('npm') may resolve npm.cmd, while CreateProcess('npm', ...)
+    still raises WinError 2. Always execute the resolved pathname.
+    """
+    if windows is None:
+        windows = os.name == 'nt'
+    if windows and name.lower() in ('npm','pnpm','yarn','corepack','bun'):
+        resolved = shutil.which(name + '.cmd') or shutil.which(name + '.exe')
+        if resolved:
+            return resolved
+    return shutil.which(name)
+
+
 def frontend_root(root):
     candidates = [root] if (root/'package.json').is_file() else []
     excluded = {'node_modules','target','.git','vendor','.venv','dist','build'}
@@ -122,7 +137,7 @@ def resolve(root):
                 raise SystemExit('FALHA: comando beforeBuildCommand menciona gerenciadores conflitantes.')
             manager=hits[0] if hits else 'npm'
     if manager == 'bun':
-        raise SystemExit('FALHA: projeto usa Bun, mas esta V8.1 não configura Bun nos runners; release bloqueada de forma segura, sem executar npm incorretamente.')
+        raise SystemExit('FALHA: projeto usa Bun, mas este kit R11 não configura Bun nos runners; release bloqueada de forma segura, sem executar npm incorretamente.')
     if manager in ('pnpm','yarn') and not declared:
         raise SystemExit('FALHA: '+manager+' detectado pelo lockfile, mas packageManager não fixa versão em package.json; acrescente ex.: "packageManager": "'+manager+'@9.15.3" sob revisão.')
     config_file = root/'src-tauri/tauri.conf.json'
@@ -155,8 +170,10 @@ def ensure(root, info):
         command=['npm','install','--package-lock-only','--ignore-scripts','--no-audit','--no-fund']
     else:
         command=['corepack','pnpm','install','--lockfile-only','--ignore-scripts']
-    if not shutil.which(command[0]):
+    executable = executable_for_subprocess(command[0])
+    if not executable:
         raise SystemExit('FALHA: '+command[0]+' não está instalado localmente para criar lockfile.')
+    command[0] = executable
     subprocess.run(command,cwd=folder,check=True)
     after=hashlib.sha256((folder/'package.json').read_bytes()).hexdigest()
     if after!=before:
@@ -190,13 +207,16 @@ def install(info):
         declared=info['declared'] or ''
         if declared.startswith('yarn@1.') or not (folder/'.yarnrc.yml').exists():
             command=['corepack','yarn','install','--frozen-lockfile']
-    if manager in ('pnpm','yarn') and not shutil.which('corepack'):
-        if not shutil.which('npm'):
+    if manager in ('pnpm','yarn') and not executable_for_subprocess('corepack'):
+        npm_executable = executable_for_subprocess('npm')
+        if not npm_executable:
             raise SystemExit('FALHA: npm indisponível para preparar Corepack no runner.')
         print('Preparando Corepack fixo 0.36.0 para o gerenciador declarado',manager)
-        subprocess.run(['npm','install','--global','corepack@0.36.0'],check=True)
-    if not shutil.which(command[0]):
+        subprocess.run([npm_executable,'install','--global','corepack@0.36.0'],check=True)
+    executable = executable_for_subprocess(command[0])
+    if not executable:
         raise SystemExit('FALHA: '+command[0]+' indisponível no runner para '+manager)
+    command[0] = executable
     print('Instalação reproduzível:',manager,info['lock'],'em',folder)
     subprocess.run(command,cwd=folder,check=True)
 

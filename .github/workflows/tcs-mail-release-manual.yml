@@ -1,10 +1,10 @@
-name: TCS Mail V8.1 - DEB RPM AppImage EXE MSI APP DMG + assinaturas
+name: TCS Mail 0.8.3 | Instaladores R11 | Manual | Assinaturas
 
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag ASSINADA existente, ex.: v0.8.3-rc9"
+        description: "Tag ASSINADA dos instaladores, ex.: installers-0.8.3-r11 (app permanece 0.8.3)"
         required: true
         type: string
       linux:
@@ -63,7 +63,7 @@ jobs:
           import hashlib, json, os, pathlib, re, subprocess, tempfile
           tag=os.environ['RELEASE_TAG']
           allowed='1674F96ACE21F6A87434398ADD1974F061C5B37E'
-          if not re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z][0-9A-Za-z.-]*)?',tag):
+          if not re.fullmatch(r'installers-0\.8\.3-r[1-9][0-9]*',tag):
               raise SystemExit('Tag fora do formato permitido')
           def git(*args):
               return subprocess.run(['git',*args],check=True,capture_output=True,text=True).stdout.strip()
@@ -89,15 +89,14 @@ jobs:
           for line in (checked.stdout+'\n'+checked.stderr).splitlines():
               if '[GNUPG:] VALIDSIG ' in line:
                   fields=line.split('[GNUPG:] VALIDSIG ',1)[1].split()
-                  valid.append((fields[-1] if len(fields)>=10 else fields[0]).upper())
-          if valid!=[allowed]:
-              raise SystemExit('Tag nao assinada pela identidade principal autorizada')
+                  valid.append((fields[0].upper(),fields[9].upper() if len(fields)>=10 else ''))
+          if valid!=[('EB55887A1A9923E4D2FE4803B03A894B9F604781',allowed)]:
+              raise SystemExit('Tag nao assinada pela subchave EXCLUSIVA e chave principal autorizadas')
           sha=git('rev-parse','refs/tags/'+tag+'^{}')
           subprocess.run(['git','merge-base','--is-ancestor',sha,'HEAD'],check=True)
           config=json.loads(git('show',sha+':src-tauri/tauri.conf.json'))
-          version=tag[1:].split('-')[0]
-          if str(config.get('version'))!=version:
-              raise SystemExit('Versao do Tauri nao corresponde a tag')
+          if str(config.get('version'))!='0.8.3':
+              raise SystemExit('O aplicativo deve permanecer na versao 0.8.3, independentemente da tag dos instaladores')
           with open(os.environ['GITHUB_OUTPUT'],'a',encoding='utf-8') as output:
               output.write('sha='+sha+'\n')
           print('Assinatura e ancestralidade verificadas ANTES de usar o codigo da tag:',sha)
@@ -107,6 +106,8 @@ jobs:
           ref: ${{ steps.source.outputs.sha }}
           fetch-depth: 0
           persist-credentials: false
+      - name: Testar contratos do kit de instaladores sem compilar
+        run: python3 scripts/release/test_kit_r11.py
       - name: Verificar fonte, logo e lockfiles da tag JA autenticada
         env:
           RELEASE_TAG: ${{ inputs.tag }}
@@ -162,6 +163,8 @@ jobs:
         run: |
           cp src-tauri/icons/icon.png "$RUNNER_TEMP/tcs-mail-icon-original.png"
           cargo tauri icon "$RUNNER_TEMP/tcs-mail-icon-original.png"
+          cp "$RUNNER_TEMP/tcs-mail-icon-original.png" src-tauri/icons/icon.png
+          cmp "$RUNNER_TEMP/tcs-mail-icon-original.png" src-tauri/icons/icon.png
           python scripts/release/prepare_branding.py
           test -s src-tauri/icons/icon.ico
           test -s src-tauri/icons/icon.icns
@@ -279,6 +282,8 @@ jobs:
         run: |
           cp src-tauri/icons/icon.png "$RUNNER_TEMP/tcs-mail-icon-original.png"
           cargo tauri icon "$RUNNER_TEMP/tcs-mail-icon-original.png"
+          cp "$RUNNER_TEMP/tcs-mail-icon-original.png" src-tauri/icons/icon.png
+          cmp "$RUNNER_TEMP/tcs-mail-icon-original.png" src-tauri/icons/icon.png
           python scripts/release/prepare_branding.py
       - name: Rodar qualidade 0.8.3
         shell: bash
@@ -422,6 +427,8 @@ jobs:
         run: |
           cp src-tauri/icons/icon.png "$RUNNER_TEMP/tcs-mail-icon-original.png"
           cargo tauri icon "$RUNNER_TEMP/tcs-mail-icon-original.png"
+          cp "$RUNNER_TEMP/tcs-mail-icon-original.png" src-tauri/icons/icon.png
+          cmp "$RUNNER_TEMP/tcs-mail-icon-original.png" src-tauri/icons/icon.png
           python scripts/release/prepare_branding.py
       - name: Configurar Developer ID + notarizacao quando disponiveis
         id: native
@@ -479,18 +486,18 @@ jobs:
           mkdir -p _build_out
           find src-tauri/target/release/bundle -type f -name '*.dmg' -exec cp -v '{}' _build_out/ \;
           test "$(find _build_out -maxdepth 1 -name '*.dmg' | wc -l)" -eq 1
-          mv "$(find _build_out -maxdepth 1 -name '*.dmg' -print -quit)" "_build_out/TCS-Mail-${{ matrix.arch }}.dmg"
+          mv "$(find _build_out -maxdepth 1 -name '*.dmg' -print -quit)" "_build_out/TCS-Mail-0.8.3-${{ matrix.arch }}.dmg"
           if [ "$NATIVE_SIGNED" = true ]; then
             codesign -dv --verbose=4 "$APP" 2>&1 | grep -q 'Authority=Developer ID Application:'
             if ! xcrun stapler validate "$APP"; then xcrun stapler staple "$APP"; fi
             xcrun stapler validate "$APP"
-            if ! xcrun stapler validate "_build_out/TCS-Mail-${{ matrix.arch }}.dmg"; then
-              xcrun stapler staple "_build_out/TCS-Mail-${{ matrix.arch }}.dmg"
+            if ! xcrun stapler validate "_build_out/TCS-Mail-0.8.3-${{ matrix.arch }}.dmg"; then
+              xcrun stapler staple "_build_out/TCS-Mail-0.8.3-${{ matrix.arch }}.dmg"
             fi
-            xcrun stapler validate "_build_out/TCS-Mail-${{ matrix.arch }}.dmg"
+            xcrun stapler validate "_build_out/TCS-Mail-0.8.3-${{ matrix.arch }}.dmg"
           fi
-          ditto -c -k --sequesterRsrc --keepParent "$APP" "_build_out/TCS-Mail-${{ matrix.arch }}.app.zip"
-          test -s "_build_out/TCS-Mail-${{ matrix.arch }}.app.zip"
+          ditto -c -k --sequesterRsrc --keepParent "$APP" "_build_out/TCS-Mail-0.8.3-${{ matrix.arch }}.app.zip"
+          test -s "_build_out/TCS-Mail-0.8.3-${{ matrix.arch }}.app.zip"
       - name: Registrar comprovacao do modo macOS
         env:
           NATIVE_SIGNED: ${{ steps.native.outputs.signed }}
@@ -586,6 +593,8 @@ jobs:
       - name: Validar 9 distribuicoes e gerar SHA256SUMS
         run: python3 scripts/release/finalize_release.py
       - name: Gerar notas com modos de assinatura comprovados
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
         run: python3 scripts/release/prepare_release_notes.py
       - name: Assinar CADA pacote, manifesto e notas com subchave GPG; verificar
         env:
@@ -635,7 +644,7 @@ jobs:
             exit 1
           fi
           gh release create "$RELEASE_TAG" _release_ready/* \
-            --verify-tag --draft \
-            --title "TCS Mail $RELEASE_TAG" \
+            --verify-tag --draft --latest=false \
+            --title "TCS Mail 0.8.3 - Instaladores ${RELEASE_TAG##*-}" \
             --notes-file _release_ready/LEIA_ANTES.txt
           echo 'Release criada como RASCUNHO. Avalie os instaladores antes de publicar.'
