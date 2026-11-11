@@ -137,7 +137,7 @@ def resolve(root):
                 raise SystemExit('FALHA: comando beforeBuildCommand menciona gerenciadores conflitantes.')
             manager=hits[0] if hits else 'npm'
     if manager == 'bun':
-        raise SystemExit('FALHA: projeto usa Bun, mas este kit R11 não configura Bun nos runners; release bloqueada de forma segura, sem executar npm incorretamente.')
+        raise SystemExit('FALHA: projeto usa Bun, mas este kit R12 não configura Bun nos runners; release bloqueada de forma segura, sem executar npm incorretamente.')
     if manager in ('pnpm','yarn') and not declared:
         raise SystemExit('FALHA: '+manager+' detectado pelo lockfile, mas packageManager não fixa versão em package.json; acrescente ex.: "packageManager": "'+manager+'@9.15.3" sob revisão.')
     config_file = root/'src-tauri/tauri.conf.json'

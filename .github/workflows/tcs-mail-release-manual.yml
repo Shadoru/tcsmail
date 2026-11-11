@@ -1,10 +1,10 @@
-name: TCS Mail 0.8.3 | Instaladores R11 | Manual | Assinaturas
+name: TCS Mail 0.8.3 | Instaladores R12 | Manual | Assinaturas
 
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag ASSINADA dos instaladores, ex.: installers-0.8.3-r11 (app permanece 0.8.3)"
+        description: "Tag ASSINADA dos instaladores, ex.: installers-0.8.3-r12 (app permanece 0.8.3)"
         required: true
         type: string
       linux:
@@ -107,7 +107,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Testar contratos do kit de instaladores sem compilar
-        run: python3 scripts/release/test_kit_r11.py
+        run: python3 scripts/release/test_kit_r12.py
       - name: Verificar fonte, logo e lockfiles da tag JA autenticada
         env:
           RELEASE_TAG: ${{ inputs.tag }}

@@ -151,8 +151,8 @@ def build(args):
     root=validate_project(Path(args.project))
     formats=selected_formats(args.formats,system)
     print('Plataforma real:',system,platform.machine(),'| pacotes:',', '.join(formats))
-    tools_root=Path.home()/'Projetos/TCS-Mail-Compiladores-R11/local-tools'
-    results_base=Path.home()/'Projetos/TCS-Mail-Compiladores-R11/resultados'
+    tools_root=Path.home()/'Projetos/TCS-Mail-Compiladores-R12/local-tools'
+    results_base=Path.home()/'Projetos/TCS-Mail-Compiladores-R12/resultados'
     session=results_base/(datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')+
                           '-'+system.lower()+'-'+platform.machine().lower())
     if session.exists():
