@@ -1,0 +1,641 @@
+name: TCS Mail V8.1 - DEB RPM AppImage EXE MSI APP DMG + assinaturas
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag ASSINADA existente, ex.: v0.8.3-rc9"
+        required: true
+        type: string
+      linux:
+        description: "Linux x64 - DEB e RPM"
+        type: boolean
+        default: true
+      appimage:
+        description: "Linux x64 - AppImage com assinatura GPG"
+        type: boolean
+        default: true
+      windows:
+        description: "Windows x64: EXE, MSI"
+        type: boolean
+        default: true
+      mac_intel:
+        description: "macOS Intel: APP.zip, DMG"
+        type: boolean
+        default: true
+      mac_arm:
+        description: "macOS Apple Silicon: APP.zip, DMG"
+        type: boolean
+        default: true
+      strict_native_signing:
+        description: "Exigir Authenticode e Apple Developer ID/notarizacao; marque SOMENTE se certificados estiverem configurados"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tcs-mail-release-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    name: Conferir tag GPG, versao e origem
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      source_sha: ${{ steps.source.outputs.sha }}
+      mac_matrix: ${{ steps.matrix.outputs.json }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 confirmado via GitHub API
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validar tag com codigo confiavel da main ANTES de executar a fonte
+        id: source
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, re, subprocess, tempfile
+          tag=os.environ['RELEASE_TAG']
+          allowed='1674F96ACE21F6A87434398ADD1974F061C5B37E'
+          if not re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z][0-9A-Za-z.-]*)?',tag):
+              raise SystemExit('Tag fora do formato permitido')
+          def git(*args):
+              return subprocess.run(['git',*args],check=True,capture_output=True,text=True).stdout.strip()
+          if git('cat-file','-t','refs/tags/'+tag)!='tag':
+              raise SystemExit('Somente tags anotadas e assinadas são permitidas')
+          key=pathlib.Path('.github/keys/tcs-mail-release-public.asc')
+          if not key.is_file():
+              raise SystemExit('Chave publica canonica indisponivel na main')
+          inspect=subprocess.run(['gpg','--batch','--show-keys','--with-colons',str(key)],check=True,capture_output=True,text=True).stdout
+          rows=[x.split(':') for x in inspect.splitlines()]
+          pubs=[r for r in rows if r[0]=='pub']
+          fps=[r[9].upper() for r in rows if r[0]=='fpr']
+          if len(pubs)!=1 or not fps or fps[0]!=allowed:
+              raise SystemExit('Chave publica nao corresponde a identidade autorizada')
+          with tempfile.TemporaryDirectory() as homedir:
+              os.chmod(homedir,0o700)
+              env={**os.environ,'GNUPGHOME':homedir}
+              subprocess.run(['gpg','--batch','--import',str(key)],env=env,check=True,capture_output=True)
+              checked=subprocess.run(['git','verify-tag','--raw',tag],env=env,capture_output=True,text=True)
+          if checked.returncode:
+              raise SystemExit('Assinatura da tag invalida: '+checked.stderr)
+          valid=[]
+          for line in (checked.stdout+'\n'+checked.stderr).splitlines():
+              if '[GNUPG:] VALIDSIG ' in line:
+                  fields=line.split('[GNUPG:] VALIDSIG ',1)[1].split()
+                  valid.append((fields[-1] if len(fields)>=10 else fields[0]).upper())
+          if valid!=[allowed]:
+              raise SystemExit('Tag nao assinada pela identidade principal autorizada')
+          sha=git('rev-parse','refs/tags/'+tag+'^{}')
+          subprocess.run(['git','merge-base','--is-ancestor',sha,'HEAD'],check=True)
+          config=json.loads(git('show',sha+':src-tauri/tauri.conf.json'))
+          version=tag[1:].split('-')[0]
+          if str(config.get('version'))!=version:
+              raise SystemExit('Versao do Tauri nao corresponde a tag')
+          with open(os.environ['GITHUB_OUTPUT'],'a',encoding='utf-8') as output:
+              output.write('sha='+sha+'\n')
+          print('Assinatura e ancestralidade verificadas ANTES de usar o codigo da tag:',sha)
+          PY
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 confirmado via GitHub API
+        with:
+          ref: ${{ steps.source.outputs.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verificar fonte, logo e lockfiles da tag JA autenticada
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+          TCS_TRUSTED_SOURCE_SHA: ${{ steps.source.outputs.sha }}
+        run: python3 scripts/release/check_release_source.py
+      - name: Selecionar apenas arquiteturas macOS marcadas
+        id: matrix
+        env:
+          BUILD_MAC_INTEL: ${{ inputs.mac_intel }}
+          BUILD_MAC_ARM: ${{ inputs.mac_arm }}
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, os
+          entries = []
+          if os.environ['BUILD_MAC_INTEL'] == 'true':
+              entries.append({'arch':'intel','os':'macos-15-intel'})
+          if os.environ['BUILD_MAC_ARM'] == 'true':
+              entries.append({'arch':'arm','os':'macos-15'})
+          print('json='+json.dumps(entries,separators=(',',':')))
+          PY
+
+  linux:
+    name: Linux - formatos selecionados (DEB/RPM/AppImage)
+    needs: preflight
+    if: ${{ inputs.linux || inputs.appimage }}
+    runs-on: ubuntu-22.04
+    environment: tcsmail-signing
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 confirmado via GitHub API
+        with:
+          ref: ${{ needs.preflight.outputs.source_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 confirmado via GitHub API
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5 confirmado via GitHub API
+        with:
+          python-version: '3.12'
+      - name: Preparar Linux + Tauri 2
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev libxdo-dev libfuse2 patchelf build-essential pkg-config fakeroot rpm file
+          rustup update stable
+          cargo install tauri-cli --version '2.11.4' --locked
+          python scripts/release/dependency_strategy.py install
+          python -m pip install 'Pillow==11.3.0'
+      - name: Regenerar icones a partir da logo oficial e preparar branding
+        run: |
+          cp src-tauri/icons/icon.png "$RUNNER_TEMP/tcs-mail-icon-original.png"
+          cargo tauri icon "$RUNNER_TEMP/tcs-mail-icon-original.png"
+          python scripts/release/prepare_branding.py
+          test -s src-tauri/icons/icon.ico
+          test -s src-tauri/icons/icon.icns
+      - name: Executar qualidade canonica 0.8.3 (falha bloqueia release)
+        run: python scripts/release/run_quality_only.py
+      - name: Compilar binario sem agrupar
+        run: cargo tauri build --no-bundle --config src-tauri/tauri.tcs-release-branding.conf.json
+      - name: Empacotar somente os formatos selecionados e assinar AppImage quando solicitado
+        env:
+          TCS_GPG_SUBKEY: ${{ secrets.TCS_GPG_PRIVATE_SUBKEY }}
+          APPIMAGETOOL_SIGN_PASSPHRASE: ${{ secrets.TCS_GPG_SIGNING_PASSPHRASE }}
+          SIGN_KEY: ${{ vars.TCS_GPG_SUBKEY_FPR }}
+          SIGN: '1'
+          APPIMAGETOOL_FORCE_SIGN: '1'
+          BUILD_LINUX: ${{ inputs.linux }}
+          BUILD_APPIMAGE: ${{ inputs.appimage }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          selected=()
+          if [ "$BUILD_LINUX" = true ]; then selected+=(deb rpm); fi
+          if [ "$BUILD_APPIMAGE" = true ]; then
+            selected+=(appimage)
+            test -n "$TCS_GPG_SUBKEY" && test -n "$SIGN_KEY" && test -n "$APPIMAGETOOL_SIGN_PASSPHRASE"
+            test "$SIGN_KEY" = 'EB55887A1A9923E4D2FE4803B03A894B9F604781'
+            export GNUPGHOME
+            GNUPGHOME="$(mktemp -d)"
+            chmod 700 "$GNUPGHOME"
+            trap 'rm -rf "$GNUPGHOME"' EXIT
+            printf '%s\n' "$TCS_GPG_SUBKEY" | gpg --batch --import >/dev/null
+            gpg --batch --list-secret-keys "$SIGN_KEY" >/dev/null
+            test "$(gpg --batch --with-colons --fingerprint --list-keys "$SIGN_KEY" | awk -F: '$1=="fpr"{print $10; exit}')" = '1674F96ACE21F6A87434398ADD1974F061C5B37E'
+          else
+            unset SIGN SIGN_KEY APPIMAGETOOL_FORCE_SIGN APPIMAGETOOL_SIGN_PASSPHRASE
+          fi
+          targets="$(IFS=,; echo "${selected[*]}")"
+          test -n "$targets"
+          cargo tauri bundle --bundles "$targets" --config src-tauri/tauri.tcs-release-branding.conf.json
+      - name: Conferir assinatura GPG incorporada e coletar pacotes
+        env:
+          BUILD_LINUX: ${{ inputs.linux }}
+          BUILD_APPIMAGE: ${{ inputs.appimage }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p _build_out
+          if [ "$BUILD_LINUX" = true ]; then
+            find src-tauri/target/release/bundle -type f \( -iname '*.deb' -o -iname '*.rpm' \) -exec cp -v '{}' _build_out/ \;
+          fi
+          if [ "$BUILD_APPIMAGE" = true ]; then
+            find src-tauri/target/release/bundle -type f -iname '*.AppImage' -exec cp -v '{}' _build_out/ \;
+          fi
+          if [ "$BUILD_APPIMAGE" = true ]; then
+            test "$(find _build_out -maxdepth 1 -iname '*.AppImage' | wc -l)" -eq 1
+            APPIMAGE="$(find _build_out -maxdepth 1 -iname '*.AppImage' -print -quit)"
+            chmod +x "$APPIMAGE"
+            "$APPIMAGE" --appimage-signature | grep -q 'BEGIN PGP SIGNATURE'
+          else
+            test "$(find _build_out -maxdepth 1 -iname '*.AppImage' | wc -l)" -eq 0
+          fi
+          if [ "$BUILD_LINUX" = true ]; then
+            test "$(find _build_out -maxdepth 1 -iname '*.deb' | wc -l)" -eq 1
+            test "$(find _build_out -maxdepth 1 -iname '*.rpm' | wc -l)" -eq 1
+          else
+            test "$(find _build_out -maxdepth 1 -iname '*.deb' | wc -l)" -eq 0
+            test "$(find _build_out -maxdepth 1 -iname '*.rpm' | wc -l)" -eq 0
+          fi
+      - name: Registrar comprovacao do modo Linux
+        env:
+          BUILD_LINUX: ${{ inputs.linux }}
+          BUILD_APPIMAGE: ${{ inputs.appimage }}
+        run: python scripts/release/record_build.py linux false _build_out
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4 confirmado via GitHub API
+        if: ${{ !github.event.repository.private }}
+        with:
+          subject-path: '_build_out/*'
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4 confirmado via GitHub API
+        with:
+          name: tcsmail-linux
+          path: _build_out/*
+          if-no-files-found: error
+          retention-days: 7
+
+  windows:
+    name: Windows EXE + MSI (Authenticode quando configurado)
+    needs: preflight
+    if: ${{ inputs.windows }}
+    runs-on: windows-2022
+    environment: tcsmail-signing
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 confirmado via GitHub API
+        with:
+          ref: ${{ needs.preflight.outputs.source_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 confirmado via GitHub API
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5 confirmado via GitHub API
+        with:
+          python-version: '3.12'
+      - name: Preparar Windows + Tauri 2
+        shell: bash
+        run: |
+          rustup update stable
+          cargo install tauri-cli --version '2.11.4' --locked
+          python scripts/release/dependency_strategy.py install
+          python -m pip install 'Pillow==11.3.0'
+      - name: Gerar icones e imagens dos instaladores
+        shell: bash
+        run: |
+          cp src-tauri/icons/icon.png "$RUNNER_TEMP/tcs-mail-icon-original.png"
+          cargo tauri icon "$RUNNER_TEMP/tcs-mail-icon-original.png"
+          python scripts/release/prepare_branding.py
+      - name: Rodar qualidade 0.8.3
+        shell: bash
+        run: python scripts/release/run_quality_only.py
+      - name: Compilar executavel Windows antes de empacotar
+        shell: bash
+        run: cargo tauri build --no-bundle --config src-tauri/tauri.tcs-release-branding.conf.json
+      - name: Assinar e verificar executavel INTERNO antes dos instaladores
+        id: native_app
+        shell: pwsh
+        env:
+          TCS_WINDOWS_PFX_BASE64: ${{ secrets.TCS_WINDOWS_PFX_BASE64 }}
+          TCS_WINDOWS_PFX_PASSWORD: ${{ secrets.TCS_WINDOWS_PFX_PASSWORD }}
+          REQUIRE_NATIVE: ${{ inputs.strict_native_signing }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $present = -not [string]::IsNullOrWhiteSpace($env:TCS_WINDOWS_PFX_BASE64)
+          $hasPassword = -not [string]::IsNullOrWhiteSpace($env:TCS_WINDOWS_PFX_PASSWORD)
+          if ($present -ne $hasPassword) { throw 'Credenciais Authenticode incompletas.' }
+          if (-not $present) {
+            if ($env:REQUIRE_NATIVE -eq 'true') { throw 'Certificado Authenticode exigido, mas ausente.' }
+            'signed=false' | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+            exit 0
+          }
+          $pfxFile = Join-Path $env:RUNNER_TEMP 'tcsmail-internal.pfx'
+          [IO.File]::WriteAllBytes($pfxFile, [Convert]::FromBase64String($env:TCS_WINDOWS_PFX_BASE64))
+          $password = ConvertTo-SecureString $env:TCS_WINDOWS_PFX_PASSWORD -AsPlainText -Force
+          $cert = Import-PfxCertificate -FilePath $pfxFile -CertStoreLocation 'Cert:\CurrentUser\My' -Password $password
+          Remove-Item $pfxFile -Force
+          if (-not $cert -or -not $cert.HasPrivateKey) { throw 'PFX sem chave privada.' }
+          $tool = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin' -Recurse -Filter signtool.exe |
+            Where-Object { $_.FullName -match '\\x64\\signtool\.exe$' } |
+            Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $tool) { throw 'signtool.exe indisponível.' }
+          $binaries = @(Get-ChildItem 'src-tauri/target/release' -File -Filter '*.exe')
+          if ($binaries.Count -ne 1) { throw "Executável interno ambíguo: $($binaries.Count) encontrados." }
+          & $tool.FullName sign /sha1 $cert.Thumbprint /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $binaries[0].FullName
+          if ($LASTEXITCODE -ne 0) { throw 'Falha de assinatura do executável interno.' }
+          & $tool.FullName verify /pa /v $binaries[0].FullName
+          if ($LASTEXITCODE -ne 0) { throw 'Assinatura do executável interno inválida.' }
+          'signed=true' | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+      - name: Empacotar EXE NSIS e MSI sem recompilar o binario assinado
+        shell: bash
+        run: cargo tauri bundle --bundles nsis,msi --config src-tauri/tauri.tcs-release-branding.conf.json
+      - name: Coletar EXE e MSI
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p _build_out
+          find src-tauri/target/release/bundle -type f \( -iname '*.exe' -o -iname '*.msi' \) -exec cp -v '{}' _build_out/ \;
+          test "$(find _build_out -maxdepth 1 -iname '*.exe' | wc -l)" -eq 1
+          test "$(find _build_out -maxdepth 1 -iname '*.msi' | wc -l)" -eq 1
+      - name: Authenticode opcional nos DOIS instaladores (sem fingir assinatura)
+        id: native
+        shell: pwsh
+        env:
+          TCS_WINDOWS_PFX_BASE64: ${{ secrets.TCS_WINDOWS_PFX_BASE64 }}
+          TCS_WINDOWS_PFX_PASSWORD: ${{ secrets.TCS_WINDOWS_PFX_PASSWORD }}
+          APP_SIGNED: ${{ steps.native_app.outputs.signed }}
+          REQUIRE_NATIVE: ${{ inputs.strict_native_signing }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $provided = -not [string]::IsNullOrWhiteSpace($env:TCS_WINDOWS_PFX_BASE64)
+          $hasPassword = -not [string]::IsNullOrWhiteSpace($env:TCS_WINDOWS_PFX_PASSWORD)
+          if ($provided -ne $hasPassword) { throw 'Credenciais Authenticode incompletas.' }
+          if (-not $provided) {
+            if ($env:REQUIRE_NATIVE -eq 'true') { throw 'Authenticode exigido, mas certificado não configurado.' }
+            'signed=false' | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+            Write-Host 'SEM Authenticode: arquivos serão protegidos por assinatura GPG destacada na release.'
+            exit 0
+          }
+          if ($env:APP_SIGNED -ne 'true') { throw 'Executável interno não foi assinado; não é seguro publicar instaladores como Authenticode completo.' }
+          $pfxFile = Join-Path $env:RUNNER_TEMP 'tcsmail-signing.pfx'
+          [IO.File]::WriteAllBytes($pfxFile, [Convert]::FromBase64String($env:TCS_WINDOWS_PFX_BASE64))
+          $password = ConvertTo-SecureString $env:TCS_WINDOWS_PFX_PASSWORD -AsPlainText -Force
+          $cert = Import-PfxCertificate -FilePath $pfxFile -CertStoreLocation 'Cert:\CurrentUser\My' -Password $password
+          Remove-Item $pfxFile -Force
+          if (-not $cert -or -not $cert.HasPrivateKey) { throw 'Certificado PFX sem chave privada.' }
+          $tool = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin' -Recurse -Filter signtool.exe |
+            Where-Object { $_.FullName -match '\\x64\\signtool\.exe$' } |
+            Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $tool) { throw 'signtool.exe x64 indisponível no runner Windows.' }
+          $installers = @(Get-ChildItem '_build_out' -File | Where-Object { $_.Extension -in '.exe','.msi' })
+          if ($installers.Count -ne 2) { throw 'Esperados exatamente EXE e MSI.' }
+          foreach ($installer in $installers) {
+            & $tool.FullName sign /sha1 $cert.Thumbprint /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $installer.FullName
+            if ($LASTEXITCODE -ne 0) { throw "Falha ao assinar $($installer.Name)" }
+            & $tool.FullName verify /pa /v $installer.FullName
+            if ($LASTEXITCODE -ne 0) { throw "Falha de verificação Authenticode $($installer.Name)" }
+          }
+          'signed=true' | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+      - name: Registrar comprovacao do modo Windows
+        shell: bash
+        env:
+          NATIVE_SIGNED: ${{ steps.native.outputs.signed }}
+        run: python scripts/release/record_build.py windows "$NATIVE_SIGNED" _build_out
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4 confirmado via GitHub API
+        if: ${{ !github.event.repository.private }}
+        with:
+          subject-path: '_build_out/*'
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4 confirmado via GitHub API
+        with:
+          name: tcsmail-windows
+          path: _build_out/*
+          if-no-files-found: error
+          retention-days: 7
+
+  macos:
+    name: macOS ${{ matrix.arch }} APP + DMG
+    needs: preflight
+    if: ${{ inputs.mac_intel || inputs.mac_arm }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.preflight.outputs.mac_matrix) }}
+    runs-on: ${{ matrix.os }}
+    environment: tcsmail-signing
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 confirmado via GitHub API
+        with:
+          ref: ${{ needs.preflight.outputs.source_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 confirmado via GitHub API
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5 confirmado via GitHub API
+        with:
+          python-version: '3.12'
+      - name: Preparar Mac + Tauri 2
+        run: |
+          rustup update stable
+          cargo install tauri-cli --version '2.11.4' --locked
+          python scripts/release/dependency_strategy.py install
+          python -m pip install 'Pillow==11.3.0'
+      - name: Gerar icones e fundo DMG
+        run: |
+          cp src-tauri/icons/icon.png "$RUNNER_TEMP/tcs-mail-icon-original.png"
+          cargo tauri icon "$RUNNER_TEMP/tcs-mail-icon-original.png"
+          python scripts/release/prepare_branding.py
+      - name: Configurar Developer ID + notarizacao quando disponiveis
+        id: native
+        env:
+          TCS_APPLE_P12_BASE64: ${{ secrets.TCS_APPLE_P12_BASE64 }}
+          TCS_APPLE_P12_PASSWORD: ${{ secrets.TCS_APPLE_P12_PASSWORD }}
+          TCS_APPLE_SIGNING_IDENTITY: ${{ vars.TCS_APPLE_SIGNING_IDENTITY }}
+          TCS_APPLE_ID: ${{ secrets.TCS_APPLE_ID }}
+          TCS_APPLE_APP_PASSWORD: ${{ secrets.TCS_APPLE_APP_PASSWORD }}
+          TCS_APPLE_TEAM_ID: ${{ secrets.TCS_APPLE_TEAM_ID }}
+          REQUIRE_NATIVE: ${{ inputs.strict_native_signing }}
+        run: |
+          set -euo pipefail
+          values=("$TCS_APPLE_P12_BASE64" "$TCS_APPLE_P12_PASSWORD" "$TCS_APPLE_SIGNING_IDENTITY" "$TCS_APPLE_ID" "$TCS_APPLE_APP_PASSWORD" "$TCS_APPLE_TEAM_ID")
+          present=0
+          for value in "${values[@]}"; do if [ -n "$value" ]; then present=$((present+1)); fi; done
+          if [ "$present" -eq 0 ]; then
+            if [ "$REQUIRE_NATIVE" = true ]; then echo 'FALHA: Developer ID/notarizacao obrigatorios.' >&2; exit 1; fi
+            echo 'APPLE_SIGNING_IDENTITY=-' >> "$GITHUB_ENV"
+            echo 'signed=false' >> "$GITHUB_OUTPUT"
+            echo 'Modo AD-HOC (sem Developer ID ou notarizacao).'
+            exit 0
+          fi
+          if [ "$present" -ne 6 ]; then echo 'FALHA: configuracao Apple incompleta; nada sera considerado assinado.' >&2; exit 1; fi
+          cert="$RUNNER_TEMP/tcsmail.p12"
+          keychain="$RUNNER_TEMP/tcsmail.keychain-db"
+          keypass="$(uuidgen)"
+          printf %s "$TCS_APPLE_P12_BASE64" | base64 -D > "$cert"
+          security create-keychain -p "$keypass" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keypass" "$keychain"
+          security list-keychains -d user -s "$keychain" login.keychain-db
+          security import "$cert" -k "$keychain" -P "$TCS_APPLE_P12_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$keypass" "$keychain"
+          rm -f "$cert"
+          security find-identity -v -p codesigning "$keychain"
+          echo "APPLE_SIGNING_IDENTITY=$TCS_APPLE_SIGNING_IDENTITY" >> "$GITHUB_ENV"
+          echo 'signed=true' >> "$GITHUB_OUTPUT"
+      - name: Rodar qualidade 0.8.3
+        run: python scripts/release/run_quality_only.py
+      - name: Compilar APP + DMG (Developer ID/notarizacao ou ad-hoc)
+        env:
+          APPLE_ID: ${{ secrets.TCS_APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.TCS_APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.TCS_APPLE_TEAM_ID }}
+        run: cargo tauri build --bundles app,dmg --config src-tauri/tauri.tcs-release-branding.conf.json
+      - name: Validar pacote APP e DMG
+        env:
+          NATIVE_SIGNED: ${{ steps.native.outputs.signed }}
+        run: |
+          set -euo pipefail
+          APP="$(find src-tauri/target/release/bundle/macos -maxdepth 1 -name '*.app' -print -quit)"
+          test -n "$APP"
+          codesign --verify --deep --strict "$APP"
+          mkdir -p _build_out
+          find src-tauri/target/release/bundle -type f -name '*.dmg' -exec cp -v '{}' _build_out/ \;
+          test "$(find _build_out -maxdepth 1 -name '*.dmg' | wc -l)" -eq 1
+          mv "$(find _build_out -maxdepth 1 -name '*.dmg' -print -quit)" "_build_out/TCS-Mail-${{ matrix.arch }}.dmg"
+          if [ "$NATIVE_SIGNED" = true ]; then
+            codesign -dv --verbose=4 "$APP" 2>&1 | grep -q 'Authority=Developer ID Application:'
+            if ! xcrun stapler validate "$APP"; then xcrun stapler staple "$APP"; fi
+            xcrun stapler validate "$APP"
+            if ! xcrun stapler validate "_build_out/TCS-Mail-${{ matrix.arch }}.dmg"; then
+              xcrun stapler staple "_build_out/TCS-Mail-${{ matrix.arch }}.dmg"
+            fi
+            xcrun stapler validate "_build_out/TCS-Mail-${{ matrix.arch }}.dmg"
+          fi
+          ditto -c -k --sequesterRsrc --keepParent "$APP" "_build_out/TCS-Mail-${{ matrix.arch }}.app.zip"
+          test -s "_build_out/TCS-Mail-${{ matrix.arch }}.app.zip"
+      - name: Registrar comprovacao do modo macOS
+        env:
+          NATIVE_SIGNED: ${{ steps.native.outputs.signed }}
+        run: python scripts/release/record_build.py mac-${{ matrix.arch }} "$NATIVE_SIGNED" _build_out
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4 confirmado via GitHub API
+        if: ${{ !github.event.repository.private }}
+        with:
+          subject-path: '_build_out/*'
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4 confirmado via GitHub API
+        with:
+          name: tcsmail-mac-${{ matrix.arch }}
+          path: _build_out/*
+          if-no-files-found: error
+          retention-days: 7
+
+  partial_signatures:
+    name: Assinar GPG tambem quando apenas alguns formatos forem selecionados
+    needs: [preflight, linux, windows, macos]
+    if: ${{ always() && needs.preflight.result == 'success' && !(inputs.linux && inputs.appimage && inputs.windows && inputs.mac_intel && inputs.mac_arm) && (inputs.linux || inputs.appimage || inputs.windows || inputs.mac_intel || inputs.mac_arm) && (needs.linux.result == 'success' || needs.linux.result == 'skipped') && (needs.windows.result == 'success' || needs.windows.result == 'skipped') && (needs.macos.result == 'success' || needs.macos.result == 'skipped') }}
+    runs-on: ubuntu-24.04
+    environment: tcsmail-signing
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 confirmado via GitHub API
+        with:
+          ref: ${{ needs.preflight.outputs.source_sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4 confirmado via GitHub API
+        with:
+          pattern: tcsmail-*
+          path: _partial_inputs
+          merge-multiple: false
+      - name: Validar inventario dos sistemas selecionados
+        env:
+          BUILD_LINUX: ${{ inputs.linux }}
+          BUILD_APPIMAGE: ${{ inputs.appimage }}
+          BUILD_WINDOWS: ${{ inputs.windows }}
+          BUILD_MAC_INTEL: ${{ inputs.mac_intel }}
+          BUILD_MAC_ARM: ${{ inputs.mac_arm }}
+        run: python3 scripts/release/finalize_partial.py
+      - name: Assinar e verificar individualmente todos os instaladores selecionados
+        env:
+          TCS_GPG_SUBKEY: ${{ secrets.TCS_GPG_PRIVATE_SUBKEY }}
+          TCS_GPG_SIGNING_PASSPHRASE: ${{ secrets.TCS_GPG_SIGNING_PASSPHRASE }}
+          TCS_GPG_SIGNING_SUBKEY_FPR: ${{ vars.TCS_GPG_SUBKEY_FPR }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$TCS_GPG_SUBKEY" && test -n "$TCS_GPG_SIGNING_PASSPHRASE" && test -n "$TCS_GPG_SIGNING_SUBKEY_FPR"
+          test "$TCS_GPG_SIGNING_SUBKEY_FPR" = 'EB55887A1A9923E4D2FE4803B03A894B9F604781'
+          export GNUPGHOME
+          GNUPGHOME="$(mktemp -d)"
+          chmod 700 "$GNUPGHOME"
+          trap 'rm -rf "$GNUPGHOME"' EXIT
+          printf '%s\n' "$TCS_GPG_SUBKEY" | gpg --batch --import >/dev/null
+          test "$(gpg --batch --with-colons --fingerprint --list-keys "$TCS_GPG_SIGNING_SUBKEY_FPR" | awk -F: '$1=="fpr"{print $10; exit}')" = '1674F96ACE21F6A87434398ADD1974F061C5B37E'
+          for item in _partial_signed/*; do
+            printf '%s' "$TCS_GPG_SIGNING_PASSPHRASE" | gpg --batch --yes --pinentry-mode loopback --passphrase-fd 0 \
+              --local-user "${TCS_GPG_SIGNING_SUBKEY_FPR}!" --armor --detach-sign -o "$item.asc" "$item"
+            gpg --batch --verify "$item.asc" "$item"
+          done
+          cp .github/keys/tcs-mail-release-public.asc _partial_signed/TCS-Mail-PUBLIC-KEY.asc
+          (cd _partial_signed && sha256sum -c SHA256SUMS)
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4 confirmado via GitHub API
+        with:
+          name: tcsmail-selected-signed
+          path: _partial_signed/*
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: Validar instaladores e assinaturas GPG; criar DRAFT
+    needs: [preflight, linux, windows, macos]
+    if: ${{ inputs.linux && inputs.appimage && inputs.windows && inputs.mac_intel && inputs.mac_arm }}
+    runs-on: ubuntu-24.04
+    environment: tcsmail-signing
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 confirmado via GitHub API
+        with:
+          ref: ${{ needs.preflight.outputs.source_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4 confirmado via GitHub API
+        with:
+          pattern: tcsmail-*
+          path: _release_artifacts
+          merge-multiple: false
+      - name: Validar 9 distribuicoes e gerar SHA256SUMS
+        run: python3 scripts/release/finalize_release.py
+      - name: Gerar notas com modos de assinatura comprovados
+        run: python3 scripts/release/prepare_release_notes.py
+      - name: Assinar CADA pacote, manifesto e notas com subchave GPG; verificar
+        env:
+          TCS_GPG_SUBKEY: ${{ secrets.TCS_GPG_PRIVATE_SUBKEY }}
+          TCS_GPG_SIGNING_PASSPHRASE: ${{ secrets.TCS_GPG_SIGNING_PASSPHRASE }}
+          TCS_GPG_SIGNING_SUBKEY_FPR: ${{ vars.TCS_GPG_SUBKEY_FPR }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$TCS_GPG_SUBKEY" && test -n "$TCS_GPG_SIGNING_PASSPHRASE" && test -n "$TCS_GPG_SIGNING_SUBKEY_FPR"
+          test "$TCS_GPG_SIGNING_SUBKEY_FPR" = 'EB55887A1A9923E4D2FE4803B03A894B9F604781'
+          export GNUPGHOME
+          GNUPGHOME="$(mktemp -d)"
+          chmod 700 "$GNUPGHOME"
+          trap 'rm -rf "$GNUPGHOME"' EXIT
+          printf '%s\n' "$TCS_GPG_SUBKEY" | gpg --batch --import >/dev/null
+          test "$(gpg --batch --with-colons --fingerprint --list-keys "$TCS_GPG_SIGNING_SUBKEY_FPR" | awk -F: '$1=="fpr"{print $10; exit}')" = '1674F96ACE21F6A87434398ADD1974F061C5B37E'
+          gpg --batch --list-secret-keys "$TCS_GPG_SIGNING_SUBKEY_FPR" >/dev/null
+          for item in _release_ready/*; do
+            test -f "$item"
+            printf '%s' "$TCS_GPG_SIGNING_PASSPHRASE" | gpg --batch --yes --pinentry-mode loopback --passphrase-fd 0 \
+              --local-user "${TCS_GPG_SIGNING_SUBKEY_FPR}!" --armor --detach-sign -o "$item.asc" "$item"
+            gpg --batch --verify "$item.asc" "$item"
+          done
+          cp .github/keys/tcs-mail-release-public.asc _release_ready/TCS-Mail-PUBLIC-KEY.asc
+          (cd _release_ready && sha256sum -c SHA256SUMS)
+      - name: Atestar os artefatos finais compilados
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4 confirmado via GitHub API
+        if: ${{ !github.event.repository.private }}
+        with:
+          subject-path: '_release_ready/*'
+      - name: Criar release RASCUNHO sem sobrescrever existentes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          SOURCE_SHA: ${{ needs.preflight.outputs.source_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          REMOTE_SHA="$(git ls-remote --tags origin "refs/tags/$RELEASE_TAG^{}" | awk '{print $1}')"
+          if [ "$REMOTE_SHA" != "$SOURCE_SHA" ]; then
+            echo 'FALHA: tag remota não aponta mais para o commit aprovado no preflight.' >&2
+            exit 1
+          fi
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo 'FALHA: ja existe release para essa tag; nada foi sobrescrito.'
+            exit 1
+          fi
+          gh release create "$RELEASE_TAG" _release_ready/* \
+            --verify-tag --draft \
+            --title "TCS Mail $RELEASE_TAG" \
+            --notes-file _release_ready/LEIA_ANTES.txt
+          echo 'Release criada como RASCUNHO. Avalie os instaladores antes de publicar.'
