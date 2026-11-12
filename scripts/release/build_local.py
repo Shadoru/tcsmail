@@ -151,8 +151,8 @@ def build(args):
     root=validate_project(Path(args.project))
     formats=selected_formats(args.formats,system)
     print('Plataforma real:',system,platform.machine(),'| pacotes:',', '.join(formats))
-    tools_root=Path.home()/'Projetos/TCS-Mail-Compiladores-R12/local-tools'
-    results_base=Path.home()/'Projetos/TCS-Mail-Compiladores-R12/resultados'
+    tools_root=Path.home()/'Projetos/TCS-Mail-Compiladores-R13/local-tools'
+    results_base=Path.home()/'Projetos/TCS-Mail-Compiladores-R13/resultados'
     session=results_base/(datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')+
                           '-'+system.lower()+'-'+platform.machine().lower())
     if session.exists():
@@ -197,16 +197,12 @@ def build(args):
         print('Pillow:',PIL.__version__)
     except ImportError:
         raise SystemExit('FALHA: Pillow não instalado neste Python (python -m pip install Pillow==11.3.0).')
-    icon_original=session/'tcs-mail-icon-original.png'
-    shutil.copy2(root/'src-tauri/icons/icon.png',icon_original)
-    run(['cargo','tauri','icon',str(icon_original)],cwd=root,env=env)
-    shutil.copy2(icon_original,root/'src-tauri/icons/icon.png')
-    version = json.loads((root/'src-tauri/tauri.conf.json').read_text(encoding='utf-8')).get('version')
-    if version != '0.8.3':
-        raise SystemExit(f'FALHA: versão do aplicativo deve ser EXATAMENTE 0.8.3, encontrada: {version!r}')
-    if hashlib.sha256((root/'src-tauri/icons/icon.png').read_bytes()).hexdigest()!=ICON_HASH:
-        raise SystemExit('FALHA: logo canônica não foi restaurada após gerar ícones.')
+    # Recursos oficiais são imutáveis: verifique todos os 13 hashes ANTES e DEPOIS.
+    # cargo tauri icon sobrescreve PNG/ICO/ICNS canônicos e é proibido no release.
+    gate=root/'scripts/quality/rc7-branding-gate.py'
+    run([sys.executable,str(gate)],cwd=root,env=env)
     run([sys.executable,str(HERE/'prepare_branding.py')],cwd=root,env=env)
+    run([sys.executable,str(gate)],cwd=root,env=env)
     if not args.sem_qualidade:
         run([sys.executable,str(HERE/'run_quality_only.py'),'--root',str(root)],cwd=root,env=env)
     cfg=root/'src-tauri/tauri.tcs-release-branding.conf.json'

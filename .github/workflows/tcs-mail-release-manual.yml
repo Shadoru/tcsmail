@@ -1,10 +1,10 @@
-name: TCS Mail 0.8.3 | Instaladores R12 | Manual | Assinaturas
+name: TCS Mail 0.8.3 | Instaladores R13 | Manual | Assinaturas
 
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag ASSINADA dos instaladores, ex.: installers-0.8.3-r12 (app permanece 0.8.3)"
+        description: "Tag ASSINADA dos instaladores, ex.: installers-0.8.3-r13 (app permanece 0.8.3)"
         required: true
         type: string
       linux:
@@ -49,7 +49,7 @@ jobs:
       source_sha: ${{ steps.source.outputs.sha }}
       mac_matrix: ${{ steps.matrix.outputs.json }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 confirmado via GitHub API
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5 confirmado via GitHub API
         with:
           ref: main
           fetch-depth: 0
@@ -101,13 +101,13 @@ jobs:
               output.write('sha='+sha+'\n')
           print('Assinatura e ancestralidade verificadas ANTES de usar o codigo da tag:',sha)
           PY
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 confirmado via GitHub API
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5 confirmado via GitHub API
         with:
           ref: ${{ steps.source.outputs.sha }}
           fetch-depth: 0
           persist-credentials: false
       - name: Testar contratos do kit de instaladores sem compilar
-        run: python3 scripts/release/test_kit_r12.py
+        run: python3 scripts/release/test_kit_r13.py
       - name: Verificar fonte, logo e lockfiles da tag JA autenticada
         env:
           RELEASE_TAG: ${{ inputs.tag }}
@@ -140,15 +140,15 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 confirmado via GitHub API
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5 confirmado via GitHub API
         with:
           ref: ${{ needs.preflight.outputs.source_sha }}
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 confirmado via GitHub API
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5 confirmado via GitHub API
         with:
           node-version: '22'
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5 confirmado via GitHub API
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6 confirmado via GitHub API
         with:
           python-version: '3.12'
       - name: Preparar Linux + Tauri 2
@@ -159,13 +159,12 @@ jobs:
           cargo install tauri-cli --version '2.11.4' --locked
           python scripts/release/dependency_strategy.py install
           python -m pip install 'Pillow==11.3.0'
-      - name: Regenerar icones a partir da logo oficial e preparar branding
+      - name: Validar os 13 recursos oficiais e preparar SOMENTE arte auxiliar
         run: |
-          cp src-tauri/icons/icon.png "$RUNNER_TEMP/tcs-mail-icon-original.png"
-          cargo tauri icon "$RUNNER_TEMP/tcs-mail-icon-original.png"
-          cp "$RUNNER_TEMP/tcs-mail-icon-original.png" src-tauri/icons/icon.png
-          cmp "$RUNNER_TEMP/tcs-mail-icon-original.png" src-tauri/icons/icon.png
+          python scripts/quality/rc7-branding-gate.py
           python scripts/release/prepare_branding.py
+          python scripts/quality/rc7-branding-gate.py
+          git diff --exit-code -- src-tauri/icons
           test -s src-tauri/icons/icon.ico
           test -s src-tauri/icons/icon.icns
       - name: Executar qualidade canonica 0.8.3 (falha bloqueia release)
@@ -241,7 +240,7 @@ jobs:
         if: ${{ !github.event.repository.private }}
         with:
           subject-path: '_build_out/*'
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4 confirmado via GitHub API
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6 confirmado via GitHub API
         with:
           name: tcsmail-linux
           path: _build_out/*
@@ -259,15 +258,15 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 confirmado via GitHub API
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5 confirmado via GitHub API
         with:
           ref: ${{ needs.preflight.outputs.source_sha }}
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 confirmado via GitHub API
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5 confirmado via GitHub API
         with:
           node-version: '22'
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5 confirmado via GitHub API
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6 confirmado via GitHub API
         with:
           python-version: '3.12'
       - name: Preparar Windows + Tauri 2
@@ -277,14 +276,13 @@ jobs:
           cargo install tauri-cli --version '2.11.4' --locked
           python scripts/release/dependency_strategy.py install
           python -m pip install 'Pillow==11.3.0'
-      - name: Gerar icones e imagens dos instaladores
+      - name: Validar hashes de icones e gerar imagens EXTRAS dos instaladores
         shell: bash
         run: |
-          cp src-tauri/icons/icon.png "$RUNNER_TEMP/tcs-mail-icon-original.png"
-          cargo tauri icon "$RUNNER_TEMP/tcs-mail-icon-original.png"
-          cp "$RUNNER_TEMP/tcs-mail-icon-original.png" src-tauri/icons/icon.png
-          cmp "$RUNNER_TEMP/tcs-mail-icon-original.png" src-tauri/icons/icon.png
+          python scripts/quality/rc7-branding-gate.py
           python scripts/release/prepare_branding.py
+          python scripts/quality/rc7-branding-gate.py
+          git diff --exit-code -- src-tauri/icons
       - name: Rodar qualidade 0.8.3
         shell: bash
         run: python scripts/release/run_quality_only.py
@@ -384,7 +382,7 @@ jobs:
         if: ${{ !github.event.repository.private }}
         with:
           subject-path: '_build_out/*'
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4 confirmado via GitHub API
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6 confirmado via GitHub API
         with:
           name: tcsmail-windows
           path: _build_out/*
@@ -406,15 +404,15 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 confirmado via GitHub API
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5 confirmado via GitHub API
         with:
           ref: ${{ needs.preflight.outputs.source_sha }}
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 confirmado via GitHub API
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5 confirmado via GitHub API
         with:
           node-version: '22'
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5 confirmado via GitHub API
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6 confirmado via GitHub API
         with:
           python-version: '3.12'
       - name: Preparar Mac + Tauri 2
@@ -423,13 +421,12 @@ jobs:
           cargo install tauri-cli --version '2.11.4' --locked
           python scripts/release/dependency_strategy.py install
           python -m pip install 'Pillow==11.3.0'
-      - name: Gerar icones e fundo DMG
+      - name: Preservar icones canonicos e gerar somente fundo DMG
         run: |
-          cp src-tauri/icons/icon.png "$RUNNER_TEMP/tcs-mail-icon-original.png"
-          cargo tauri icon "$RUNNER_TEMP/tcs-mail-icon-original.png"
-          cp "$RUNNER_TEMP/tcs-mail-icon-original.png" src-tauri/icons/icon.png
-          cmp "$RUNNER_TEMP/tcs-mail-icon-original.png" src-tauri/icons/icon.png
+          python scripts/quality/rc7-branding-gate.py
           python scripts/release/prepare_branding.py
+          python scripts/quality/rc7-branding-gate.py
+          git diff --exit-code -- src-tauri/icons
       - name: Configurar Developer ID + notarizacao quando disponiveis
         id: native
         env:
@@ -506,7 +503,7 @@ jobs:
         if: ${{ !github.event.repository.private }}
         with:
           subject-path: '_build_out/*'
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4 confirmado via GitHub API
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6 confirmado via GitHub API
         with:
           name: tcsmail-mac-${{ matrix.arch }}
           path: _build_out/*
@@ -522,11 +519,11 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 confirmado via GitHub API
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5 confirmado via GitHub API
         with:
           ref: ${{ needs.preflight.outputs.source_sha }}
           persist-credentials: false
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4 confirmado via GitHub API
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7 confirmado via GitHub API
         with:
           pattern: tcsmail-*
           path: _partial_inputs
@@ -562,7 +559,7 @@ jobs:
           done
           cp .github/keys/tcs-mail-release-public.asc _partial_signed/TCS-Mail-PUBLIC-KEY.asc
           (cd _partial_signed && sha256sum -c SHA256SUMS)
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4 confirmado via GitHub API
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6 confirmado via GitHub API
         with:
           name: tcsmail-selected-signed
           path: _partial_signed/*
@@ -580,12 +577,12 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 confirmado via GitHub API
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5 confirmado via GitHub API
         with:
           ref: ${{ needs.preflight.outputs.source_sha }}
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4 confirmado via GitHub API
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7 confirmado via GitHub API
         with:
           pattern: tcsmail-*
           path: _release_artifacts
