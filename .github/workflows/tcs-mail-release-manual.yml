@@ -1,10 +1,10 @@
-name: TCS Mail 0.8.3 | Instaladores R14 | Manual | Assinaturas
+name: TCS Mail 0.8.3 | Instaladores R15 | Manual | Assinaturas
 
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag ASSINADA dos instaladores, ex.: installers-0.8.3-r14 (app permanece 0.8.3)"
+        description: "Tag ASSINADA dos instaladores, ex.: installers-0.8.3-r15 (app permanece 0.8.3)"
         required: true
         type: string
       linux:
@@ -107,7 +107,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Testar contratos do kit de instaladores sem compilar
-        run: python3 scripts/release/test_kit_r14.py
+        run: python3 scripts/release/test_kit_r15.py
       - name: Verificar fonte, logo e lockfiles da tag JA autenticada
         env:
           RELEASE_TAG: ${{ inputs.tag }}
@@ -159,6 +159,9 @@ jobs:
           cargo install tauri-cli --version '2.11.4' --locked
           python scripts/release/dependency_strategy.py install
           python -m pip install 'Pillow==11.3.0'
+      - name: Detectar diretorios efetivos do Cargo workspace
+        shell: bash
+        run: python scripts/release/cargo_layout.py --github-env
       - name: Executar qualidade canonica 0.8.3 (falha bloqueia release)
         run: python scripts/release/run_quality_only.py
       - name: Validar os 13 recursos oficiais e preparar SOMENTE arte auxiliar
@@ -211,10 +214,10 @@ jobs:
           set -euo pipefail
           mkdir -p _build_out
           if [ "$BUILD_LINUX" = true ]; then
-            find src-tauri/target/release/bundle -type f \( -iname '*.deb' -o -iname '*.rpm' \) -exec cp -v '{}' _build_out/ \;
+            find "$TCS_CARGO_BUNDLE" -type f \( -iname '*.deb' -o -iname '*.rpm' \) -exec cp -v '{}' _build_out/ \;
           fi
           if [ "$BUILD_APPIMAGE" = true ]; then
-            find src-tauri/target/release/bundle -type f -iname '*.AppImage' -exec cp -v '{}' _build_out/ \;
+            find "$TCS_CARGO_BUNDLE" -type f -iname '*.AppImage' -exec cp -v '{}' _build_out/ \;
           fi
           if [ "$BUILD_APPIMAGE" = true ]; then
             test "$(find _build_out -maxdepth 1 -iname '*.AppImage' | wc -l)" -eq 1
@@ -276,6 +279,9 @@ jobs:
           cargo install tauri-cli --version '2.11.4' --locked
           python scripts/release/dependency_strategy.py install
           python -m pip install 'Pillow==11.3.0'
+      - name: Detectar diretorios efetivos do Cargo workspace
+        shell: bash
+        run: python scripts/release/cargo_layout.py --github-env
       - name: Rodar qualidade 0.8.3
         shell: bash
         run: python scripts/release/run_quality_only.py
@@ -316,7 +322,7 @@ jobs:
             Where-Object { $_.FullName -match '\\x64\\signtool\.exe$' } |
             Sort-Object FullName -Descending | Select-Object -First 1
           if (-not $tool) { throw 'signtool.exe indisponível.' }
-          $binaries = @(Get-ChildItem 'src-tauri/target/release' -File -Filter '*.exe')
+          $binaries = @(Get-ChildItem -LiteralPath $env:TCS_CARGO_RELEASE -File -Filter '*.exe')
           if ($binaries.Count -ne 1) { throw "Executável interno ambíguo: $($binaries.Count) encontrados." }
           & $tool.FullName sign /sha1 $cert.Thumbprint /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $binaries[0].FullName
           if ($LASTEXITCODE -ne 0) { throw 'Falha de assinatura do executável interno.' }
@@ -326,14 +332,9 @@ jobs:
       - name: Empacotar EXE NSIS e MSI sem recompilar o binario assinado
         shell: bash
         run: cargo tauri bundle --bundles nsis,msi --config src-tauri/tauri.tcs-release-branding.conf.json
-      - name: Coletar EXE e MSI
+      - name: Coletar EXE e MSI do target Cargo real (sem usar find do MSYS)
         shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p _build_out
-          find src-tauri/target/release/bundle -type f \( -iname '*.exe' -o -iname '*.msi' \) -exec cp -v '{}' _build_out/ \;
-          test "$(find _build_out -maxdepth 1 -iname '*.exe' | wc -l)" -eq 1
-          test "$(find _build_out -maxdepth 1 -iname '*.msi' | wc -l)" -eq 1
+        run: python scripts/release/collect_bundles.py --windows --destination _build_out
       - name: Authenticode opcional nos DOIS instaladores (sem fingir assinatura)
         id: native
         shell: pwsh
@@ -421,6 +422,9 @@ jobs:
           cargo install tauri-cli --version '2.11.4' --locked
           python scripts/release/dependency_strategy.py install
           python -m pip install 'Pillow==11.3.0'
+      - name: Detectar diretorios efetivos do Cargo workspace
+        shell: bash
+        run: python scripts/release/cargo_layout.py --github-env
       - name: Rodar qualidade 0.8.3
         run: python scripts/release/run_quality_only.py
       - name: Preservar icones canonicos e gerar somente fundo DMG
@@ -452,6 +456,8 @@ jobs:
             exit 0
           fi
           if [ "$present" -ne 6 ]; then echo 'FALHA: configuracao Apple incompleta; nada sera considerado assinado.' >&2; exit 1; fi
+          case "$TCS_APPLE_SIGNING_IDENTITY" in 'Developer ID Application: '*) ;; *) echo 'FALHA: identidade Apple nao e Developer ID Application' >&2; exit 1 ;; esac
+          if ! [[ "$TCS_APPLE_TEAM_ID" =~ ^[A-Z0-9]{10}$ ]]; then echo 'FALHA: APPLE_TEAM_ID invalido (10 caracteres)' >&2; exit 1; fi
           cert="$RUNNER_TEMP/tcsmail.p12"
           keychain="$RUNNER_TEMP/tcsmail.keychain-db"
           keypass="$(uuidgen)"
@@ -464,24 +470,34 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple: -s -k "$keypass" "$keychain"
           rm -f "$cert"
           security find-identity -v -p codesigning "$keychain"
+          security find-identity -v -p codesigning "$keychain" | grep -F -- "$TCS_APPLE_SIGNING_IDENTITY" >/dev/null || { echo 'FALHA: Developer ID Application nao corresponde ao certificado importado' >&2; exit 1; }
           echo "APPLE_SIGNING_IDENTITY=$TCS_APPLE_SIGNING_IDENTITY" >> "$GITHUB_ENV"
           echo 'signed=true' >> "$GITHUB_OUTPUT"
-      - name: Compilar APP + DMG (Developer ID/notarizacao ou ad-hoc)
+      - name: Compilar APP + DMG com Developer ID e notarizacao
+        if: ${{ steps.native.outputs.signed == 'true' }}
         env:
           APPLE_ID: ${{ secrets.TCS_APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.TCS_APPLE_APP_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.TCS_APPLE_TEAM_ID }}
         run: cargo tauri build --bundles app,dmg --config src-tauri/tauri.tcs-release-branding.conf.json
+      - name: Compilar APP + DMG ad-hoc SEM iniciar notarizacao
+        if: ${{ steps.native.outputs.signed == 'false' }}
+        run: |
+          set -euo pipefail
+          # Never leak an accidentally inherited Apple identity/credential into Tauri.
+          unset APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID APPLE_API_KEY APPLE_API_ISSUER APPLE_API_KEY_PATH APPLE_PROVIDER_SHORT_NAME
+          export APPLE_SIGNING_IDENTITY='-'
+          cargo tauri build --bundles app,dmg --config src-tauri/tauri.tcs-release-branding.conf.json
       - name: Validar pacote APP e DMG
         env:
           NATIVE_SIGNED: ${{ steps.native.outputs.signed }}
         run: |
           set -euo pipefail
-          APP="$(find src-tauri/target/release/bundle/macos -maxdepth 1 -name '*.app' -print -quit)"
+          APP="$(find "$TCS_CARGO_BUNDLE/macos" -maxdepth 1 -name '*.app' -print -quit)"
           test -n "$APP"
           codesign --verify --deep --strict "$APP"
           mkdir -p _build_out
-          find src-tauri/target/release/bundle -type f -name '*.dmg' -exec cp -v '{}' _build_out/ \;
+          find "$TCS_CARGO_BUNDLE" -type f -name '*.dmg' -exec cp -v '{}' _build_out/ \;
           test "$(find _build_out -maxdepth 1 -name '*.dmg' | wc -l)" -eq 1
           mv "$(find _build_out -maxdepth 1 -name '*.dmg' -print -quit)" "_build_out/TCS-Mail-0.8.3-${{ matrix.arch }}.dmg"
           if [ "$NATIVE_SIGNED" = true ]; then

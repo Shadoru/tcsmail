@@ -151,8 +151,8 @@ def build(args):
     root=validate_project(Path(args.project))
     formats=selected_formats(args.formats,system)
     print('Plataforma real:',system,platform.machine(),'| pacotes:',', '.join(formats))
-    tools_root=Path.home()/'Projetos/TCS-Mail-Compiladores-R14/local-tools'
-    results_base=Path.home()/'Projetos/TCS-Mail-Compiladores-R14/resultados'
+    tools_root=Path.home()/'Projetos/TCS-Mail-Compiladores-R15/local-tools'
+    results_base=Path.home()/'Projetos/TCS-Mail-Compiladores-R15/resultados'
     session=results_base/(datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')+
                           '-'+system.lower()+'-'+platform.machine().lower())
     if session.exists():
@@ -253,6 +253,11 @@ def build(args):
         if identity:
             env['APPLE_SIGNING_IDENTITY']=identity
             native_signed=True
+        else:
+            for name in ('APPLE_ID','APPLE_PASSWORD','APPLE_TEAM_ID','APPLE_API_KEY',
+                         'APPLE_API_ISSUER','APPLE_API_KEY_PATH','APPLE_PROVIDER_SHORT_NAME'):
+                env.pop(name,None)
+            env['APPLE_SIGNING_IDENTITY']='-'
         run(['cargo','tauri','build','--bundles',','.join(formats),
              '--config',str(cfg)],cwd=root,env=env)
     # At this stage all requested native build commands have completed.
