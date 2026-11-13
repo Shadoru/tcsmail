@@ -151,8 +151,8 @@ def build(args):
     root=validate_project(Path(args.project))
     formats=selected_formats(args.formats,system)
     print('Plataforma real:',system,platform.machine(),'| pacotes:',', '.join(formats))
-    tools_root=Path.home()/'Projetos/TCS-Mail-Compiladores-R13/local-tools'
-    results_base=Path.home()/'Projetos/TCS-Mail-Compiladores-R13/resultados'
+    tools_root=Path.home()/'Projetos/TCS-Mail-Compiladores-R14/local-tools'
+    results_base=Path.home()/'Projetos/TCS-Mail-Compiladores-R14/resultados'
     session=results_base/(datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')+
                           '-'+system.lower()+'-'+platform.machine().lower())
     if session.exists():
@@ -201,10 +201,12 @@ def build(args):
     # cargo tauri icon sobrescreve PNG/ICO/ICNS canônicos e é proibido no release.
     gate=root/'scripts/quality/rc7-branding-gate.py'
     run([sys.executable,str(gate)],cwd=root,env=env)
-    run([sys.executable,str(HERE/'prepare_branding.py')],cwd=root,env=env)
-    run([sys.executable,str(gate)],cwd=root,env=env)
+    # Test SOURCE before producing binary installer artwork. This is also
+    # defended by v083-utf8.py excluding generated BMP outputs.
     if not args.sem_qualidade:
         run([sys.executable,str(HERE/'run_quality_only.py'),'--root',str(root)],cwd=root,env=env)
+    run([sys.executable,str(HERE/'prepare_branding.py')],cwd=root,env=env)
+    run([sys.executable,str(gate)],cwd=root,env=env)
     cfg=root/'src-tauri/tauri.tcs-release-branding.conf.json'
     cargo_lock=[p for p in (root/'Cargo.lock',root/'src-tauri/Cargo.lock') if p.is_file()]
     if not cargo_lock:

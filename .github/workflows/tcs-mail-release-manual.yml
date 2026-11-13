@@ -1,10 +1,10 @@
-name: TCS Mail 0.8.3 | Instaladores R13 | Manual | Assinaturas
+name: TCS Mail 0.8.3 | Instaladores R14 | Manual | Assinaturas
 
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag ASSINADA dos instaladores, ex.: installers-0.8.3-r13 (app permanece 0.8.3)"
+        description: "Tag ASSINADA dos instaladores, ex.: installers-0.8.3-r14 (app permanece 0.8.3)"
         required: true
         type: string
       linux:
@@ -107,7 +107,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Testar contratos do kit de instaladores sem compilar
-        run: python3 scripts/release/test_kit_r13.py
+        run: python3 scripts/release/test_kit_r14.py
       - name: Verificar fonte, logo e lockfiles da tag JA autenticada
         env:
           RELEASE_TAG: ${{ inputs.tag }}
@@ -159,6 +159,8 @@ jobs:
           cargo install tauri-cli --version '2.11.4' --locked
           python scripts/release/dependency_strategy.py install
           python -m pip install 'Pillow==11.3.0'
+      - name: Executar qualidade canonica 0.8.3 (falha bloqueia release)
+        run: python scripts/release/run_quality_only.py
       - name: Validar os 13 recursos oficiais e preparar SOMENTE arte auxiliar
         run: |
           python scripts/quality/rc7-branding-gate.py
@@ -167,8 +169,6 @@ jobs:
           git diff --exit-code -- src-tauri/icons
           test -s src-tauri/icons/icon.ico
           test -s src-tauri/icons/icon.icns
-      - name: Executar qualidade canonica 0.8.3 (falha bloqueia release)
-        run: python scripts/release/run_quality_only.py
       - name: Compilar binario sem agrupar
         run: cargo tauri build --no-bundle --config src-tauri/tauri.tcs-release-branding.conf.json
       - name: Empacotar somente os formatos selecionados e assinar AppImage quando solicitado
@@ -276,6 +276,9 @@ jobs:
           cargo install tauri-cli --version '2.11.4' --locked
           python scripts/release/dependency_strategy.py install
           python -m pip install 'Pillow==11.3.0'
+      - name: Rodar qualidade 0.8.3
+        shell: bash
+        run: python scripts/release/run_quality_only.py
       - name: Validar hashes de icones e gerar imagens EXTRAS dos instaladores
         shell: bash
         run: |
@@ -283,9 +286,6 @@ jobs:
           python scripts/release/prepare_branding.py
           python scripts/quality/rc7-branding-gate.py
           git diff --exit-code -- src-tauri/icons
-      - name: Rodar qualidade 0.8.3
-        shell: bash
-        run: python scripts/release/run_quality_only.py
       - name: Compilar executavel Windows antes de empacotar
         shell: bash
         run: cargo tauri build --no-bundle --config src-tauri/tauri.tcs-release-branding.conf.json
@@ -421,6 +421,8 @@ jobs:
           cargo install tauri-cli --version '2.11.4' --locked
           python scripts/release/dependency_strategy.py install
           python -m pip install 'Pillow==11.3.0'
+      - name: Rodar qualidade 0.8.3
+        run: python scripts/release/run_quality_only.py
       - name: Preservar icones canonicos e gerar somente fundo DMG
         run: |
           python scripts/quality/rc7-branding-gate.py
@@ -464,8 +466,6 @@ jobs:
           security find-identity -v -p codesigning "$keychain"
           echo "APPLE_SIGNING_IDENTITY=$TCS_APPLE_SIGNING_IDENTITY" >> "$GITHUB_ENV"
           echo 'signed=true' >> "$GITHUB_OUTPUT"
-      - name: Rodar qualidade 0.8.3
-        run: python scripts/release/run_quality_only.py
       - name: Compilar APP + DMG (Developer ID/notarizacao ou ad-hoc)
         env:
           APPLE_ID: ${{ secrets.TCS_APPLE_ID }}
