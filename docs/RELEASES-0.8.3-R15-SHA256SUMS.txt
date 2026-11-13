@@ -1,0 +1,16 @@
+# TCS Mail 0.8.3 r15 — SHA-256
+
+Release oficial:
+https://github.com/Shadoru/tcsmail/releases/tag/installers-0.8.3-r15
+
+f6a3c2acd189e334a09182c937cbbb6af787c8fb36bdd51b5b2e726eec00a2ba  TCS-Mail-0.8.3-arm.app.zip
+ced6029ff2c412e7e739167b241c0ca93056826f17540d1c9135a752c3966517  TCS-Mail-0.8.3-arm.dmg
+86962243735e9c7a7444b990cd21900568b741410ba83f091ee762ad876cd294  TCS-Mail-0.8.3-intel.app.zip
+0504a8075cd888d2d257003fd18f5da279e000799b6932de8333a6a523053a2d  TCS-Mail-0.8.3-intel.dmg
+c8385069a8795dfb9c234ebbb6d76b5f37dc85fb42f7f02e696bcbabf875a010  TCS.Mail-0.8.3-1.x86_64.rpm
+e7f78a99614f65d12590b85a56195f7a0c8550e870016005ad3dbd6ae6540884  TCS.Mail_0.8.3_amd64.AppImage
+3d22fa18fabf4cc3439c285ecf65aae7c314a75b0a537b3bdade8ba46fc96718  TCS.Mail_0.8.3_amd64.deb
+e04c3b9a40cbbb2a8fe662028dd6099affe4e665531f547bb542414fd2ee4231  TCS.Mail_0.8.3_x64-setup.exe
+6803ebb1318b6c62ee41715cd3b61b86a509e86fa55470d666d7ab0295ae5a05  TCS.Mail_0.8.3_x64_en-US.msi
+
+Conferido contra os digests publicados pelo GitHub.
