@@ -23,7 +23,7 @@ Os links acima baixam diretamente os assets oficiais do GitHub. Para hashes, con
 
 Leia [GUIA_0.8.3.md](GUIA_0.8.3.md) para pré-requisitos, ferramentas isoladas, compilação Ubuntu/Windows/macOS e GitHub Actions. A fonte pode ser compilada diretamente de um ZIP, sem depender de uma RC anterior.
 
-Com Rust 1.99.0, Tauri CLI 2.12.4, Python 3.12+, Node 22/24 e bibliotecas nativas preparados:
+Use as versões indicadas pelo guia e pelo workflow vigente; não assuma uma versão de ferramenta apenas por este README.
 
 ~~~bash
 python3 scripts/build-0.8.3.py
