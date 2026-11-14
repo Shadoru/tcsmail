@@ -1,0 +1,20 @@
+PackageIdentifier: Shadoru.TCSMail
+PackageVersion: 0.8.3
+PackageLocale: en-US
+Publisher: The Creative Solver
+PublisherUrl: https://thecreativesolver.com/tcsmail/
+PublisherSupportUrl: https://thecreativesolver.com/tcsmail/support/
+PackageName: TCS Mail
+PackageUrl: https://thecreativesolver.com/tcsmail/
+License: Mozilla Public License 2.0
+LicenseUrl: https://github.com/Shadoru/tcsmail/blob/main/LICENSE
+ShortDescription: Privacy-conscious multiplatform desktop email client with optional AI assistance.
+Description: TCS Mail is a lightweight desktop email client for IMAP and SMTP accounts on Windows, Linux and macOS. AI assistance is optional and provider choice remains with the user.
+Tags:
+  - email
+  - imap
+  - smtp
+  - privacy
+  - tauri
+ManifestType: defaultLocale
+ManifestVersion: 1.9.0
