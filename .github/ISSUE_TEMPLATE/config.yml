@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Suporte e documentação
+    url: https://thecreativesolver.com/tcsmail/support/
+    about: Consulte o suporte e as perguntas frequentes antes de abrir uma issue.
+  - name: Relato privado de segurança
+    url: mailto:tcsmail@thecreativesolver.com
+    about: Não publique vulnerabilidades, credenciais ou dados sensíveis em uma issue.

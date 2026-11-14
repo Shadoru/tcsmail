@@ -1,0 +1,24 @@
+name: Sugestão de recurso
+description: Proponha uma melhoria para o TCS Mail.
+title: "[Ideia]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Descreva o problema que a ideia resolve. Não inclua dados de e-mail, credenciais ou outras informações pessoais.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problema ou necessidade
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Solução proposta
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternativas consideradas
