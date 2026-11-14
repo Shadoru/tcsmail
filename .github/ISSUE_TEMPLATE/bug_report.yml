@@ -1,7 +1,6 @@
 name: Relato de erro
 description: Ajude-nos a reproduzir e corrigir um problema sem expor dados privados.
 title: "[Bug]: "
-labels: ["bug"]
 body:
   - type: markdown
     attributes:
