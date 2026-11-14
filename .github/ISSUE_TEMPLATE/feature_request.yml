@@ -1,7 +1,6 @@
 name: Sugestão de recurso
 description: Proponha uma melhoria para o TCS Mail.
 title: "[Ideia]: "
-labels: ["enhancement"]
 body:
   - type: markdown
     attributes:
