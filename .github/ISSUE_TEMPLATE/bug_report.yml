@@ -1,0 +1,46 @@
+name: Relato de erro
+description: Ajude-nos a reproduzir e corrigir um problema sem expor dados privados.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Obrigado por contribuir. Nunca inclua senhas, tokens, mensagens, anexos ou outros dados pessoais.
+  - type: input
+    id: version
+    attributes:
+      label: Versão do TCS Mail
+      placeholder: "0.8.3 (instaladores r15)"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Sistema operacional
+      options:
+        - Linux
+        - Windows
+        - macOS
+        - Outro
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Passos para reproduzir
+      placeholder: "1. ...\n2. ...\n3. ..."
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Resultado esperado
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Resultado observado
+    validations:
+      required: true
