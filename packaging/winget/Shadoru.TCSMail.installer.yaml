@@ -1,0 +1,9 @@
+PackageIdentifier: Shadoru.TCSMail
+PackageVersion: 0.8.3
+InstallerType: nullsoft
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/Shadoru/tcsmail/releases/download/installers-0.8.3-r15/TCS.Mail_0.8.3_x64-setup.exe
+    InstallerSha256: E04C3B9A40CBBB2A8FE662028DD6099AFFE4E665531F547BB542414FD2EE4231
+ManifestType: installer
+ManifestVersion: 1.9.0
